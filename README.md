@@ -29,13 +29,8 @@ each with a two-link leg (hip + knee, 3 DoF per side) plus a passive caster.
 
 ## Demos
 
-Each mode as an animated clip, recorded with the released demo weights in Isaac Gym. The GIFs are
-attached to the [demo-media-v1 release](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/tag/demo-media-v1)
-so cloning the repository does not carry them:
-
-| | |
-|---|---|
 | **Four-wheel driving** (`P7F3e`) | **Two-wheel walking** (`P6R81`) |
+|---|---|
 | ![Four-wheel driving](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/fourw_drive.gif) | ![Two-wheel walking](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/twow_walk.gif) |
 | **Jump** (`P6R81`) | **Stand-up / lie-down** (`P7T` script + `P7L`) |
 | ![Jump](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/jump.gif) | ![Stand-up and lie-down](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/standup.gif) |
@@ -60,10 +55,6 @@ so cloning the repository does not carry them:
 | ![Simulation run](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-run.png) | ![Model configuration](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-model.png) |
 | **Telemetry plots** | **Reference** |
 | ![Telemetry plots](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-plot.png) | ![Reference](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-help.png) |
-
-The console itself ships in the repository; the screenshots above are attached to the
-[demo-media-v1 release](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/tag/demo-media-v1)
-to keep clones light.
 
 ## Requirements
 
@@ -172,14 +163,6 @@ rsl_rl-1.0.2/          bundled PPO implementation
 resources/robots/wbr/  URDFs and meshes
 releases/              demo weights only (F3e four-wheel, R81 two-wheel/jump, P7L lie-down); full training via train.py
 ```
-
-Each directory carries its own `README.md` listing what is inside it.
-
-## Versions
-
-[VERSIONS.md](VERSIONS.md) records the versions uploaded to this public repository — one entry
-per public upload, with the checkpoints included in that upload. See each `releases/<pkg>/README.md`
-for the demo weights shipped here.
 
 ## Open issues
 

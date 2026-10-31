@@ -28,13 +28,8 @@
 
 ## 功能演示
 
-每个模式一段动图，用已发布的演示权重在 Isaac Gym 中实录。GIF 挂在
-[demo-media-v1 release](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/tag/demo-media-v1)，
-克隆仓库不会带上它们：
-
-| | |
-|---|---|
 | **四轮行驶**（`P7F3e`） | **两轮行走**（`P6R81`） |
+|---|---|
 | ![四轮行驶](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/fourw_drive.gif) | ![两轮行走](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/twow_walk.gif) |
 | **跳跃**（`P6R81`） | **起立 / 趴下**（`P7T` 脚本 + `P7L`） |
 | ![跳跃](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/jump.gif) | ![起立趴下](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/standup.gif) |
@@ -56,10 +51,6 @@
 | ![仿真运行](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-run.png) | ![模型配置](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-model.png) |
 | **数据绘图** | **使用说明** |
 | ![数据绘图](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-plot.png) | ![使用说明](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-help.png) |
-
-控制台代码随仓库分发；上方截图挂在
-[demo-media-v1 release](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/tag/demo-media-v1)，
-不进仓库，保持克隆轻量。
 
 ## 环境要求
 
@@ -167,13 +158,6 @@ rsl_rl-1.0.2/          自带的 PPO 实现
 resources/robots/wbr/  URDF 与网格
 releases/              仅演示用最小权重集（F3e 四轮、R81 两轮/跳跃、P7L 趴下）；完整训练用 train.py
 ```
-
-每个目录都有自己的 `README.md`，写明该目录里有什么。
-
-## 版本
-
-[VERSIONS.md](VERSIONS.md) 只记录上传到本公仓的版本——每次公仓上传一条，附该次携带的权重。
-随仓库分发的演示权重见各 releases/<包>/README.md。
 
 ## 待解决问题
 
