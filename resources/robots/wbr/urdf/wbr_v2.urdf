@@ -1,0 +1,382 @@
+<?xml version="1.0" ?>
+<!--
+轮腿机器人 URDF 描述 (wbr_v2.urdf)
+[Ubuntu/zcode]  2026-10-24  P7 四轮模式与模式切换线专用（wbr_v1 一字节未动，两轮训练线继续读 v1）
+方案与技术依据：Shared/WBR/docs/01-技术细节/WBR_四轮模式与模式切换.md §3.2
+
+相对 wbr_v1 的改动（七处）：
+1. robot name 改 wbr_v2（与本目录 _archive/ 的历史同名文件撞名，对照见 2026-10-24 进展日志）。
+2. 左右小腿 collision 由 STL 网格改为盒体（visual 保留原 STL，外形不变）：
+   盒体 x[-0.058,+0.228] y[-0.048,+0.050] z[-0.014,+0.043] m（小腿 link 系）。
+   依据：从动球触地点在小腿系 y≈+0.0790（球心 0.0500 + 半径 0.0290），盒顶 y=+0.050，间隙 29.0 mm；
+   从动球恒为小腿侧唯一定义触地点（盒与球为父子直连，碰撞引擎自动跳过）。
+3. 新增左右膝关节从动轮（球形单轴被动轮，实测于第三方 CAD 网格）：
+   球半径 0.029 m、轮宽（视觉参考）0.0337 m、质量 0.05 kg（区间 [0.04,0.07] 中值）、
+   实心球惯量 2/5·m·r² = 1.682e-05 kg·m²；
+   关节原点＝小腿 link 系球心（＝实测轮轴心）：左 (-0.02939, +0.05000, +0.01983)、
+   右 (-0.02939, -0.05000, +0.01983)；轴 (0,0,1) 与驱动轮轴平行；
+   revolute 无位置限位（沿驱动轮先例）、被动（effort 1.0）、阻尼 0.01。
+   行为：前后＝完美滚动（关节），侧向＝低 μ 滑移（μ 在 env 侧逐 shape 设定，URDF 无此语义）。
+4. 新增关节追加在文件末尾：dof 顺序 0~5 与 wbr_v1 完全一致，动作仍 6 维，两轮线代码零改动兼容。
+5. 双自由度牛眼轮方案（2 串联转轴）经数值验证否决（持续滚动致轴翻转万向锁），
+   三轴万向架变体（真牛眼轮）以注释保留在文件末尾备查。
+6. 其余（base/thigh/驱动轮的惯量与碰撞、全部既有关节限位、网格路径）与 wbr_v1 逐字相同。
+7. 免除"膝关节从动球↔同侧大腿"的碰撞（文件末尾 <contact><exclude>，左右各一条）：
+   球半径 29mm 且球心在膝端，膝接近伸直（knee∈[-39°,-6°]）时球会擦到大腿碰撞盒（约 5mm 重叠）；
+   球在 shank 下、大腿是 shank 父级属隔代关系，不被父子自动过滤，故显式排除。
+   四轮工作姿态（knee≈-130°）本有 +31mm 余量，此项只兜住膝伸直段。
+
+修订记录：
+· 2026-10-24  膝关节从动轮球半径 0.0228 → 0.029 m（外径 45.6→58 mm），球心对齐真实轮轴心。
+  - 原 0.0228 为 RANSAC 对滚子多面体轮廓的拟合（rms 1.86 mm，偏小）；改用外缘点（每 5° 取最外点，
+    72 点）最小二乘圆拟合，得真实轴心 (-29.39, 50.00, 19.83) mm、外缘半径 29.0 mm（min 28.94 / max 29.07）。
+    旧球心 (-29.20, 51.00) 向外侧(+y)偏 1.00 mm、x 偏 0.19 mm；旧半径取 0.030 亦偏大 1 mm。
+  - 同步：球 visual/collision 半径、实心球惯量 1.04e-05→1.682e-05、头注释间隙 23.8→29.0 mm、注释内万向架变体。
+  - 影响：四轮标定俯仰 −48.27°（平台标定 −48.0°，差 0.27°）、四点触地差 0.000 mm、轮距 209.1 mm（左右对称）；
+    两轮模式（wbr_v1 训练线）不受影响。
+-->
+
+<robot name="wbr_v2">
+  <link name="base_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="4.4472E-05 0.0001156 0.010416"/>
+      <mass value="2.5418"/>
+      <inertia ixx="0.015752" ixy="-0.00040242" ixz="9.948E-05" iyy="0.010651" iyz="-0.00036894" izz="0.013679"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="../meshes_v1/base_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75294 0.75294 0.75294 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <!-- 替换以下原来的mesh，看看能不能提升仿真的速度 -->
+        <!-- <mesh filename="../meshes_v1/base_link.STL" /> -->
+        <box size="0.18 0.16 0.10"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="left_thigh_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0.15659 0.00032005 0.02025"/>
+      <mass value="0.80815"/>
+      <inertia ixx="0.00058921" ixy="-6.148E-05" ixz="6.077E-05" iyy="0.0047671" iyz="1.4E-07" izz="0.0051528"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="../meshes_v1/left_thigh_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75294 0.75294 0.75294 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0.1 0 0.02"/>
+      <geometry>
+        <box size="0.2 0.08 0.04"/>
+        <!-- <mesh filename="../meshes_v1/left_thigh_link.STL" /> -->
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="left_shank_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0.12156 0.0048719 0.01996"/>
+      <mass value="0.93138"/>
+      <inertia ixx="0.00092062" ixy="-0.00090165" ixz="2.7E-05" iyy="0.0071235" iyz="7.25E-06" izz="0.0078024"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="../meshes_v1/left_shank_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75294 0.75294 0.75294 1"/>
+      </material>
+    </visual>
+    <!-- wbr_v2：碰撞体由 STL 网格换成盒体（从动轮球是小腿侧唯一定义触地点，见文件头说明 2） -->
+    <collision>
+      <origin rpy="0 0 0" xyz="0.085 0.001 0.0145"/>
+      <geometry>
+        <box size="0.286 0.098 0.057"/>
+        <!-- <mesh filename="../meshes_v1/left_shank_link.STL" /> -->
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="right_thigh_link">
+    <inertial>
+      <origin rpy="3.141590 0 0" xyz="0.15659 0.00019029 0.02025"/>
+      <mass value="0.80815"/>
+      <inertia ixx="0.00058927" ixy="-6.416E-05" ixz="-6.077E-05" iyy="0.0047671" iyz="-1.5E-06" izz="0.0051529"/>
+    </inertial>
+    <visual>
+      <origin rpy="3.141590 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="../meshes_v1/right_thigh_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75294 0.75294 0.75294 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0.1 0 0.02"/>
+      <geometry>
+        <box size="0.2 0.08 0.04"/>
+        <!-- <mesh filename="../meshes_v1/left_thigh_link.STL" /> -->
+      </geometry>
+      <!-- <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="../meshes_v1/right_thigh_link.STL" />
+      </geometry> -->
+    </collision>
+  </link>
+
+  <link name="right_shank_link">
+    <inertial>
+      <origin rpy="3.141590 0 0" xyz="0.12114 0.0051863 0.020146"/>
+      <mass value="0.92691"/>
+      <inertia ixx="0.00090882" ixy="-0.00088222" ixz="-3.749E-05" iyy="0.0070874" iyz="-1E-06" izz="0.0077607"/>
+    </inertial>
+    <visual>
+      <origin rpy="3.141590 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="../meshes_v1/right_shank_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75294 0.75294 0.75294 1"/>
+      </material>
+    </visual>
+    <!-- wbr_v2：碰撞体由 STL 网格换成盒体（经 rpy=pi 放置后覆盖区与左腿镜像一致，见文件头说明 2） -->
+    <collision>
+      <origin rpy="3.141590 0 0" xyz="0.085 0.001 0.0145"/>
+      <geometry>
+        <box size="0.286 0.098 0.057"/>
+        <!-- <mesh filename="../meshes_v1/right_shank_link.STL" /> -->
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="left_wheel_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 0.025381"/>
+      <mass value="0.55336"/>
+      <inertia ixx="0.0010902" ixy="0" ixz="0" iyy="0.0010902" iyz="0" izz="0.0019745"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="../meshes_v1/left_wheel_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75294 0.75294 0.75294 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0.027"/>
+      <geometry>
+        <cylinder length="0.048" radius="0.08"/>
+        <!-- <mesh
+          filename="../meshes_v1/left_wheel_link.STL" /> -->
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="right_wheel_link">
+    <inertial>
+      <origin rpy="3.141590 0 0" xyz="0 0 0.025381"/>
+      <mass value="0.55336"/>
+      <inertia ixx="0.0010902" ixy="0" ixz="0" iyy="0.0010902" iyz="0" izz="0.0019745"/>
+    </inertial>
+    <visual>
+      <origin rpy="3.141590 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="../meshes_v1/right_wheel_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75294 0.75294 0.75294 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0.027"/>
+      <geometry>
+        <cylinder length="0.048" radius="0.08"/>
+        <!-- <mesh
+          filename="../meshes_v1/right_thigh_link.STL" /> -->
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- wbr_v2 新增：左膝关节从动轮（球形单轴被动轮，参数实测见文件头说明 3） -->
+  <link name="left_knee_caster">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <mass value="0.05"/>
+      <inertia ixx="1.682e-05" ixy="0" ixz="0" iyy="1.682e-05" iyz="0" izz="1.682e-05"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <sphere radius="0.029"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <sphere radius="0.029"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- wbr_v2 新增：右膝关节从动轮（与左侧镜像：小腿 link 系球心 y 取负，见文件头说明 3） -->
+  <link name="right_knee_caster">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <mass value="0.05"/>
+      <inertia ixx="1.682e-05" ixy="0" ixz="0" iyy="1.682e-05" iyz="0" izz="1.682e-05"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <sphere radius="0.029"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <sphere radius="0.029"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- 调用机器人连杆 -->
+  <joint name="left_hip_joint" type="revolute">
+    <origin rpy="-1.570796327 1.570796327 0" xyz="0 0.0936 0"/>
+    <parent link="base_link"/>
+    <child link="left_thigh_link"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="23.7" lower="-1.5708" upper="1.5708" velocity="30.0"/>
+  </joint>
+  <joint name="left_knee_joint" type="revolute">
+    <origin rpy="0 0 0" xyz="0.2 0 0.0403"/>
+    <parent link="left_thigh_link"/>
+    <child link="left_shank_link"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="23.7" lower="-2.7053" upper="-0.1" velocity="30.0"/>
+  </joint>
+  <joint name="left_wheel_joint" type="revolute">
+    <origin rpy="0 0 0" xyz="0.18 0 0.0403"/>
+    <parent link="left_shank_link"/>
+    <child link="left_wheel_link"/>
+    <limit effort="23.7" velocity="30.0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+  <joint name="right_hip_joint" type="revolute">
+    <origin rpy="1.570796327 1.570796327 0" xyz="0 -0.0936 0"/>
+    <parent link="base_link"/>
+    <child link="right_thigh_link"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="23.7" lower="-1.5708" upper="1.5708" velocity="30.0"/>
+  </joint>
+  <joint name="right_knee_joint" type="revolute">
+    <origin rpy="0 0 0" xyz="0.2 0 0.0403"/>
+    <parent link="right_thigh_link"/>
+    <child link="right_shank_link"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="23.7" lower="0.1" upper="2.7053" velocity="30.0"/>
+  </joint>
+  <joint name="right_wheel_joint" type="revolute">
+    <origin rpy="0 0 0" xyz="0.18 0 0.0403"/>
+    <parent link="right_shank_link"/>
+    <child link="right_wheel_link"/>
+    <limit effort="23.7" velocity="30.0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+
+  <!-- wbr_v2 新增关节：追加在末尾，dof 0~5 与 wbr_v1 完全一致（见文件头说明 4） -->
+  <joint name="left_knee_caster_joint" type="revolute">
+    <origin rpy="0 0 0" xyz="-0.02939 0.05000 0.01983"/>
+    <parent link="left_shank_link"/>
+    <child link="left_knee_caster"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="1.0" velocity="30.0"/>
+    <dynamics damping="0.01" friction="0.0"/>
+  </joint>
+  <joint name="right_knee_caster_joint" type="revolute">
+    <origin rpy="0 0 0" xyz="-0.02939 -0.05000 0.01983"/>
+    <parent link="right_shank_link"/>
+    <child link="right_knee_caster"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="1.0" velocity="30.0"/>
+    <dynamics damping="0.01" friction="0.0"/>
+  </joint>
+
+  <!--
+  wbr_v2 备选变体（注释保留，默认不启用）：三轴万向架牛眼轮（左腿示例，右侧镜像同理）
+  启用方法：删去本注释与上面的 left_knee_caster_joint，改用下方三关节链。
+  <joint name="left_caster_gz" type="continuous">
+    <origin rpy="0 0 0" xyz="-0.02939 0.05000 0.01983"/>
+    <parent link="left_shank_link"/>
+    <child link="left_caster_gimbal_z"/>
+    <axis xyz="0 0 1"/>
+    <dynamics damping="0.01" friction="0.0"/>
+  </joint>
+  <link name="left_caster_gimbal_z">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <mass value="0.005"/>
+      <inertia ixx="1e-07" ixy="0" ixz="0" iyy="1e-07" iyz="0" izz="1e-07"/>
+    </inertial>
+  </link>
+  <joint name="left_caster_gx" type="continuous">
+    <origin rpy="0 0 0" xyz="0 0 0"/>
+    <parent link="left_caster_gimbal_z"/>
+    <child link="left_caster_gimbal_x"/>
+    <axis xyz="1 0 0"/>
+    <dynamics damping="0.01" friction="0.0"/>
+  </joint>
+  <link name="left_caster_gimbal_x">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <mass value="0.005"/>
+      <inertia ixx="1e-07" ixy="0" ixz="0" iyy="1e-07" iyz="0" izz="1e-07"/>
+    </inertial>
+  </link>
+  <joint name="left_caster_gy" type="continuous">
+    <origin rpy="0 0 0" xyz="0 0 0"/>
+    <parent link="left_caster_gimbal_x"/>
+    <child link="left_knee_caster_ball"/>
+    <axis xyz="0 1 0"/>
+    <dynamics damping="0.01" friction="0.0"/>
+  </joint>
+  <link name="left_knee_caster_ball">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <mass value="0.05"/>
+      <inertia ixx="1.682e-05" ixy="0" ixz="0" iyy="1.682e-05" iyz="0" izz="1.682e-05"/>
+    </inertial>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry><sphere radius="0.029"/></geometry>
+    </collision>
+  </link>
+  -->
+
+  <!-- wbr_v2：免除膝关节从动球与同侧大腿的碰撞干涉（见文件头说明 7）。
+       球心在膝端、球半径 29mm，膝接近伸直时球会擦到大腿；球在 shank 下、大腿是 shank 的父级
+       （隔代关系，不会被父子自动过滤），碰撞体层面约 5mm 重叠，显式排除以避免误判接触。 -->
+  <contact>
+    <exclude link1="left_thigh_link" link2="left_knee_caster"/>
+    <exclude link1="right_thigh_link" link2="right_knee_caster"/>
+  </contact>
+</robot>

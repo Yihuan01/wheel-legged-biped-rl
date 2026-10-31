@@ -1,0 +1,249 @@
+<?xml version="1.0" ?>
+<!-- 
+轮腿机器人URDF描述 (wbr_v1.urdf)
+*** SYH *** 2026.03.27 ***
+
+来自ZZW的轮腿机器人ros包的xacro文件，经过修改以适应Wheel-Legged-Gym仿真环境。
+
+此URDF文件描述了一个轮腿机器人（WBR - 轮腿机器人）版本1。
+机器人具有一个基座主体和两条对称的腿，每条腿由以下部分组成：
+- 大腿连杆（上腿段）
+- 小腿连杆（下腿段） 
+- 轮子连杆（每条腿末端的驱动轮）
+
+关键组件：
+- base_link：具有惯性属性和简化碰撞盒的主主体
+- left/right_thigh_link：具有旋转髋关节的上腿段
+- left/right_shank_link：具有旋转膝关节的下腿段
+- left/right_wheel_link：具有连续旋转关节的轮子组件
+
+特性：
+- 对称的左右腿配置
+- 使用STL网格文件进行视觉渲染
+- 简化的碰撞几何体（盒子/圆柱体）以提高仿真性能
+- 定义关节限制和动力学参数以实现真实行为
+
+此模型设计用于Wheel-Legged-Gym仿真环境中进行强化学习和控制算法开发。
+-->
+
+<robot name="wbr_v1">
+  <link name="base_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="4.4472E-05 0.0001156 0.010416"/>
+      <mass value="2.5418"/>
+      <inertia ixx="0.015752" ixy="-0.00040242" ixz="9.948E-05" iyy="0.010651" iyz="-0.00036894" izz="0.013679"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="../meshes_v1/base_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75294 0.75294 0.75294 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <!-- 替换以下原来的mesh，看看能不能提升仿真的速度 -->
+        <!-- <mesh filename="../meshes_v1/base_link.STL" /> -->
+        <box size="0.18 0.16 0.10"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="left_thigh_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0.15659 0.00032005 0.02025"/>
+      <mass value="0.80815"/>
+      <inertia ixx="0.00058921" ixy="-6.148E-05" ixz="6.077E-05" iyy="0.0047671" iyz="1.4E-07" izz="0.0051528"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="../meshes_v1/left_thigh_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75294 0.75294 0.75294 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0.1 0 0.02"/>
+      <geometry>
+        <box size="0.2 0.08 0.04"/>
+        <!-- <mesh filename="../meshes_v1/left_thigh_link.STL" /> -->
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="left_shank_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0.12156 0.0048719 0.01996"/>
+      <mass value="0.93138"/>
+      <inertia ixx="0.00092062" ixy="-0.00090165" ixz="2.7E-05" iyy="0.0071235" iyz="7.25E-06" izz="0.0078024"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="../meshes_v1/left_shank_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75294 0.75294 0.75294 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="../meshes_v1/left_shank_link.STL"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="right_thigh_link">
+    <inertial>
+      <origin rpy="3.141590 0 0" xyz="0.15659 0.00019029 0.02025"/>
+      <mass value="0.80815"/>
+      <inertia ixx="0.00058927" ixy="-6.416E-05" ixz="-6.077E-05" iyy="0.0047671" iyz="-1.5E-06" izz="0.0051529"/>
+    </inertial>
+    <visual>
+      <origin rpy="3.141590 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="../meshes_v1/right_thigh_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75294 0.75294 0.75294 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0.1 0 0.02"/>
+      <geometry>
+        <box size="0.2 0.08 0.04"/>
+        <!-- <mesh filename="../meshes_v1/left_thigh_link.STL" /> -->
+      </geometry>
+      <!-- <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>        
+        <mesh
+          filename="../meshes_v1/right_thigh_link.STL" />
+      </geometry> -->
+    </collision>
+  </link>
+
+  <link name="right_shank_link">
+    <inertial>
+      <origin rpy="3.141590 0 0" xyz="0.12114 0.0051863 0.020146"/>
+      <mass value="0.92691"/>
+      <inertia ixx="0.00090882" ixy="-0.00088222" ixz="-3.749E-05" iyy="0.0070874" iyz="-1E-06" izz="0.0077607"/>
+    </inertial>
+    <visual>
+      <origin rpy="3.141590 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="../meshes_v1/right_shank_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75294 0.75294 0.75294 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="3.141590 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="../meshes_v1/right_shank_link.STL"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="left_wheel_link">
+    <inertial>
+      <origin rpy="0 0 0" xyz="0 0 0.025381"/>
+      <mass value="0.55336"/>
+      <inertia ixx="0.0010902" ixy="0" ixz="0" iyy="0.0010902" iyz="0" izz="0.0019745"/>
+    </inertial>
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="../meshes_v1/left_wheel_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75294 0.75294 0.75294 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0.027"/>
+      <geometry>
+        <cylinder length="0.048" radius="0.08"/>
+        <!-- <mesh
+          filename="../meshes_v1/left_wheel_link.STL" /> -->
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="right_wheel_link">
+    <inertial>
+      <origin rpy="3.141590 0 0" xyz="0 0 0.025381"/>
+      <mass value="0.55336"/>
+      <inertia ixx="0.0010902" ixy="0" ixz="0" iyy="0.0010902" iyz="0" izz="0.0019745"/>
+    </inertial>
+    <visual>
+      <origin rpy="3.141590 0 0" xyz="0 0 0"/>
+      <geometry>
+        <mesh filename="../meshes_v1/right_wheel_link.STL"/>
+      </geometry>
+      <material name="">
+        <color rgba="0.75294 0.75294 0.75294 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0.027"/>
+      <geometry>
+        <cylinder length="0.048" radius="0.08"/>
+        <!-- <mesh
+          filename="../meshes_v1/right_thigh_link.STL" /> -->
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- 调用机器人连杆 -->
+  <joint name="left_hip_joint" type="revolute">
+    <origin rpy="-1.570796327 1.570796327 0" xyz="0 0.0936 0"/>
+    <parent link="base_link"/>
+    <child link="left_thigh_link"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="23.7" lower="-1.5708" upper="1.5708" velocity="30.0"/>
+  </joint>
+  <joint name="left_knee_joint" type="revolute">
+    <origin rpy="0 0 0" xyz="0.2 0 0.0403"/>
+    <parent link="left_thigh_link"/>
+    <child link="left_shank_link"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="23.7" lower="-2.7053" upper="-0.1" velocity="30.0"/>
+  </joint>
+  <joint name="left_wheel_joint" type="revolute">
+    <origin rpy="0 0 0" xyz="0.18 0 0.0403"/>
+    <parent link="left_shank_link"/>
+    <child link="left_wheel_link"/>
+    <limit effort="23.7" velocity="30.0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+  <joint name="right_hip_joint" type="revolute">
+    <origin rpy="1.570796327 1.570796327 0" xyz="0 -0.0936 0"/>
+    <parent link="base_link"/>
+    <child link="right_thigh_link"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="23.7" lower="-1.5708" upper="1.5708" velocity="30.0"/>
+  </joint>
+  <joint name="right_knee_joint" type="revolute">
+    <origin rpy="0 0 0" xyz="0.2 0 0.0403"/>
+    <parent link="right_thigh_link"/>
+    <child link="right_shank_link"/>
+    <axis xyz="0 0 1"/>
+    <limit effort="23.7" lower="0.1" upper="2.7053" velocity="30.0"/>
+  </joint>
+  <joint name="right_wheel_joint" type="revolute">
+    <origin rpy="0 0 0" xyz="0.18 0 0.0403"/>
+    <parent link="right_shank_link"/>
+    <child link="right_wheel_link"/>
+    <limit effort="23.7" velocity="30.0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+</robot>

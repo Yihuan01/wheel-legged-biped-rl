@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WBR Console · WBR 控制台</title>
+<script>(function(){try{var t=localStorage.getItem('wbr.theme');t=t?JSON.parse(t):'system';if(t!=='light'&&t!=='dark'&&t!=='system')t='system';document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','system');}})();</script>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="app" id="app" data-nav="left">
+
+  <!-- ============================ 顶栏 ============================ -->
+  <header class="topbar">
+    <div class="brand"><span class="logo"></span>WBR Console<small id="brandSub">WBR 控制台</small></div>
+    <nav class="nav nav-top" id="navTop" aria-label="主导航"></nav>
+    <span class="spacer"></span>
+    <div class="top-ctrls" id="topCtrls"></div>
+  </header>
+
+  <div class="layout">
+    <!-- ============================ 侧栏导航 ============================ -->
+    <nav class="rail" id="navRail" aria-label="侧边导航"><div class="railcap">导航</div></nav>
+
+    <main class="main">
+
+      <!-- ======================= 页面 1：运行 ======================= -->
+      <section class="page on" data-page="run" id="page-run">
+        <div class="row runbar">
+          <span class="pill on" id="runModePill">双模式</span>
+          <button class="pill" id="runScenarioPill" title="点击切换场景">场景：P7S1b 官方组合 ▾</button>
+          <span class="muted" style="font-size:.72rem">四轮 → 起立 → 两轮站立 → 趴下</span>
+          <span class="spacer"></span>
+          <button class="btn" id="btnCheck">校验</button>
+          <button class="btn pri" id="btnStart">启动仿真</button>
+          <button class="btn danger" id="btnStop" disabled>停止</button>
+        </div>
+
+        <div class="vp-bar">
+          <span class="vp-corner" id="vpCorner">仿真视口 · 自适应填充</span>
+          <span class="spacer"></span>
+          <div class="vp-actions">
+            <button data-vp="camera" id="vpCamera" title="相机是否跟随机器人（默认关闭）">相机跟随：关</button>
+            <button data-vp="front">前置窗口</button>
+            <button data-vp="realign">重新对齐</button>
+            <button data-vp="calib" title="多显示器/缩放对不齐时：点两下校准（先左上角、再右下角）">校准对齐</button>
+            <button data-vp="undock">降下</button>
+            <button data-vp="popout" title="在新窗口打开本页（嵌入式面板拿不到屏幕坐标时用）">独立窗口</button>
+            <button data-vp="fullscreen">全屏</button>
+          </div>
+        </div>
+        <div class="viewport" id="viewport">
+          <div class="vp-inner" id="vpInner">
+            <b>原生窗口停靠区</b>
+            启动后 Isaac Gym 窗口自动去边框、置顶并覆盖此区域<br>
+            不抓流，仿真保持原生帧率；切换页签时窗口自动降下
+            <div class="hint">屏幕坐标只在普通浏览器窗口（或点「独立窗口」）里可读；嵌入式面板里停靠不可用</div>
+          </div>
+        </div>
+
+        <div class="box console">
+          <div class="chans" id="chans"></div>
+          <div class="ctrlrow">
+            <span class="pill on" id="modeNowPill">模式：四轮</span>
+            <button class="btn" id="btnRise" data-act="rise">起立</button>
+            <button class="btn" id="btnLower" data-act="lower">趴下</button>
+            <button class="btn" data-act="reset">复位</button>
+            <button class="btn" data-act="armjump">装填跳</button>
+            <label class="tgl"><input type="checkbox" id="tglAuto"> 连跳</label>
+            <span class="spacer"></span>
+            <button class="btn warn" id="btnFavorite">☆ 收藏当前</button>
+          </div>
+          <div class="status" id="runStatus"></div>
+        </div>
+
+        <div class="drawer">
+          <div class="dtabs" id="drawerTabs">
+            <button data-drawer="log" aria-pressed="true">运行记录</button>
+            <button data-drawer="console" aria-pressed="false">控制台输出</button>
+            <button data-drawer="cmd" aria-pressed="false">复现命令</button>
+          </div>
+          <div class="dbody" data-dbody="log" id="drawerLog"></div>
+          <div class="dbody" data-dbody="console" id="drawerConsole" hidden></div>
+          <div class="dbody" data-dbody="cmd" id="drawerCmd" hidden></div>
+        </div>
+      </section>
+
+      <!-- ======================= 页面 2：绘图 ======================= -->
+      <section class="page" data-page="plot" id="page-plot">
+        <div class="plot-head">
+          <div class="plot-row">
+            <span class="lbl">日志</span>
+            <select class="input" id="plotLog" style="max-width:22rem"></select>
+            <button class="btn sm" id="plotRefresh" title="重新拉取最新遥测文件列表（新跑的仿真会出现在最上面）">↻ 刷新</button>
+            <span class="kindbadge" id="plotKind">—</span>
+            <div class="cfgchip" id="plotCfgChip" title="查看这份录像使用的模型配置">
+              <span>模型配置</span><b id="plotCfgName">—</b><span class="caret">▾</span>
+            </div>
+            <span class="spacer"></span>
+            <button class="btn sm" id="plotSavePage">保存整页</button>
+            <button class="btn sm" id="plotSaveCells">保存分图</button>
+          </div>
+          <div class="plot-row">
+            <span class="lbl">窗</span>
+            <input class="input" type="number" id="plotT0" step="0.5">
+            <span class="lbl">→</span>
+            <input class="input" type="number" id="plotT1" step="0.5"><span class="lbl">s</span>
+            <input class="input" type="number" id="plotWid" step="0.5" min="0.2"><span class="lbl">s 宽</span>
+            <button class="btn sm" data-quick="10">10s</button>
+            <button class="btn sm" data-quick="30">30s</button>
+            <button class="btn sm" data-quick="all">全部</button>
+            <button class="btn pri sm" id="plotDraw">绘制</button>
+            <label class="tgl"><input type="checkbox" id="plotFollow" checked> 自动跟随</label>
+            <span class="spacer"></span>
+            <span class="plot-seg muted" id="plotSeg"></span>
+          </div>
+          <canvas id="plotOv" class="plot-ov"></canvas>
+        </div>
+        <div class="plot-legend" id="plotLegend"></div>
+        <div class="plot-grid" id="plotGrid"></div>
+      </section>
+
+      <!-- ======================= 页面 3：模型配置 ======================= -->
+      <section class="page" data-page="model" id="page-model">
+        <div class="pagehead">
+          <h3>模型配置</h3>
+          <span class="muted" style="font-size:.76rem">当前模式：<b id="modelModeName">双模式</b></span>
+          <span class="spacer"></span>
+          <button class="btn" id="btnCheck2">校验</button>
+          <button class="btn" id="btnSaveScenario">保存场景</button>
+          <button class="btn pri" id="btnStart2">启动仿真</button>
+        </div>
+
+        <div class="model-layout">
+          <!-- 左栏：启动预检 + 场景管理 / 检查点库（后两块均分剩余高度、块内滚动，空时也不塌陷） -->
+          <aside class="model-side">
+            <div class="box pf-box">
+              <h4>启动预检</h4>
+              <div class="checks" id="preflight"></div>
+            </div>
+            <div class="box grow">
+              <h4>场景管理 <span class="badge">scenarios/</span></h4>
+              <div class="list scroll" id="scenarioList"></div>
+            </div>
+            <div class="box grow">
+              <h4>检查点库 <span class="badge">saved/ 固化</span></h4>
+              <div class="list scroll" id="savedList"></div>
+            </div>
+          </aside>
+
+          <!-- 右栏：模型配置 —— 双模式（上）/ 单策略（下）两个分区，各带标题栏分隔 -->
+          <div class="model-main">
+            <section class="cfg-card" data-mode="uni">
+              <div class="cfg-head">
+                <span class="cfg-ic">⇄</span>
+                <b>双模式</b>
+                <span class="cfg-meta" id="mcUniMeta">—</span>
+                <button class="cfg-use" data-mode="uni">设为当前</button>
+              </div>
+              <div class="cfg-body">
+                <div class="detail-cap"><span class="badge pri">衔接链</span><span class="muted">四轮 → 起立 → 两轮 → 趴下；每格可单独更换模型，维度不匹配不会被选中</span></div>
+                <div class="chain" id="chain"></div>
+                <div class="detail-sub">
+                  <h5>起立方式
+                    <select class="input pin sel" id="standupModeSel" style="margin-left:8px;width:auto">
+                      <option value="p7s">模型（P7S 学习策略）</option>
+                      <option value="trad">传统控制（P7T 脚本链）</option>
+                    </select>
+                  </h5>
+                </div>
+                <div class="detail-sub">
+                  <h5>参数 <span class="badge" id="chainModeBadge">按生效位置</span></h5>
+                  <div id="chainParams"></div>
+                </div>
+              </div>
+            </section>
+
+            <section class="cfg-card" data-mode="single">
+              <div class="cfg-head">
+                <span class="cfg-ic">▶</span>
+                <b>单策略</b>
+                <span class="cfg-meta" id="mcSingleMeta">—</span>
+                <button class="cfg-use" data-mode="single">设为当前</button>
+              </div>
+              <div class="cfg-body">
+                <div class="detail-cap"><span class="badge pri">单策略</span><span class="muted">选择 task / run / checkpoint，或用检查点库一键带入</span></div>
+                <div class="single-form" id="singleBox">
+                  <label class="sf"><span>task</span>
+                    <select class="input" id="singleTask">
+                      <option>wbr_flat</option><option>wbr_flat4</option><option>wbr_switch</option><option>wbr_terrain</option><option>wbr_demo</option><option>wbr_combo</option><option>wbr_elements</option>
+                    </select>
+                  </label>
+                  <label class="sf"><span>run</span><select class="input" id="singleRun"></select></label>
+                  <label class="sf"><span>checkpoint</span><select class="input" id="singleCkpt"></select></label>
+                  <span class="badge ok" id="singleBadge2">obs —</span>
+                  <span class="spacer"></span>
+                  <button class="btn sm pri" id="btnSinglePick">从检查点库选择…</button>
+                  <button class="btn sm" id="btnSingleSolidify" title="把当前单策略 checkpoint 固化到检查点库（需命名）">固化检查点</button>
+                </div>
+                <div class="single-hint muted">单策略模式可回放跳跃；双模式下 jump 通道置灰保留。</div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======================= 页面 4：使用说明 ======================= -->
+      <section class="page" data-page="use" id="page-use">
+        <div class="pagehead">
+          <h3>使用说明</h3>
+          <span class="muted" style="font-size:.76rem">参数 · 功能 · 快捷键 · 存储路径</span>
+        </div>
+
+        <div class="usegrid">
+          <div class="box">
+            <h4>参数说明</h4>
+            <div class="usedoc">
+              <div class="drow"><b>起立方案</b><span><code>P7S</code>＝学习策略相位机（对齐/起立/交接，可调 <code>t_align / t_rise / t_handover</code> 与腿 P 倍率 <code>leg_p_gains</code>）；<code>P7T</code>＝传统脚本链（静稳→折蹲→伸腿→恒力矩抬升→交 W3，可调 <code>t_trad_* / trad_torque / trad_boost / trad_hcmd</code>）。</span></div>
+              <div class="drow"><b>相位时长</b><span><code>t_align / t_rise / t_handover / t_lower / t_tilt / t_absorb</code>：起立与趴下各相位的持续时间（秒），写入 <code>env.sw</code>，重启生效。</span></div>
+              <div class="drow"><b>传统起立参数</b><span>静稳/折蹲/蹲稳/伸腿时长、抬升超时上限、恒定轮力矩 C、伸腿腿 P 倍率、交 W3 体高与保持时长；<code>standup_mode=P7T</code> 时生效。</span></div>
+              <div class="drow"><b>五路指令</b><span><code>vx</code> 前进线速度、<code>yaw</code> 偏航角速度、<code>height</code> 躯干目标高度、<code>roll</code> 侧倾压弯角、<code>jump</code> 跳跃升高量。滑块两侧显示<b>当前加载模型</b>的指令量程（四轮/两轮各自量程不同）。</span></div>
+            </div>
+          </div>
+
+          <div class="box">
+            <h4>功能说明</h4>
+            <div class="usedoc">
+              <div class="drow"><b>启动 / 停止 / 校验</b><span>「校验」做启动预检（权重存在、维度匹配、显卡、训练进程）；「启动仿真」按当前模式（双模式 / 单策略）拉起 Isaac Gym；「停止」结束仿真。</span></div>
+              <div class="drow"><b>起立 / 趴下 / 复位</b><span>四轮下可「起立」进两轮、两轮下可「趴下」回四轮；「复位」随时把机器人摆回四轮起点。</span></div>
+              <div class="drow"><b>装填跳 / 连跳</b><span>两轮可跳（双模式第③格用含跳跃的两轮模型如 R81；单策略模式下亦可用）。装填一次跳跃（触发键 <code>H</code>）；装填后约 <code>arm_delay</code>（默认 0.1s）站定即起跳（双模式回放已调快，接近单策略瞬时起跳）；「连跳」为自动循环跳跃。</span></div>
+              <div class="drow"><b>场景 / 检查点库</b><span><b>双击</b>条目即加载：场景→套用该场景（四槽或单策略），固化存档→加载到单策略。每条最右两个图标：<b>笔</b>（提示「覆写到本条」）用当前右侧编辑区/单策略内容覆写该条，会弹保存窗口、命名确认后覆写；<b>垃圾桶</b>（提示「删除本条」）弹确认后删除。单策略区另有「固化检查点」按钮（命名后把当前 checkpoint 存入检查点库）。</span></div>
+              <div class="drow"><b>数据绘图</b><span>读取遥测日志画曲线（单策略 <code>wbr_tel_*</code> 与双模式 <code>wbr_switch_tel_*</code> 共用同一套<b>五列模板</b>）：列1 线速度/偏航/滚转/高度跟随，列2 竖直速度/跳跃/<b>相位</b>，列3–5 髋/膝/轮（位置+扭矩）。相位图纵轴<b>只印数字</b>（0–11），<b>鼠标扫过「相位」图标题</b>会浮出编号↔中文对照；支持时间窗、自动跟随、整页/分图导出。</span></div>
+              <div class="drow"><b>原生窗口停靠</b><span>仿真视口不抓流，把 Isaac Gym 原生窗口去边框置顶覆盖到视口；需在真实浏览器窗口/标签页里用。</span></div>
+            </div>
+          </div>
+
+          <div class="box">
+            <h4>快捷键</h4>
+            <div class="helplist usehelp">
+              <span class="kbd">W / S</span><span>前进线速度 +/−</span>
+              <span class="kbd">A / D</span><span>偏航 −/+</span>
+              <span class="kbd">I / K</span><span>体高 +/−</span>
+              <span class="kbd">J / L</span><span>侧倾 roll −/+</span>
+              <span class="kbd">U / O</span><span>跳跃高度 −/+（仅两轮可跳）</span>
+              <span class="kbd">H</span><span>装填跳一次（仅两轮可跳）</span>
+              <span class="kbd">空格</span><span>指令重置到当前模式默认位</span>
+              <span class="kbd">M</span><span>切换 四轮 / 起立 / 两轮 / 趴下</span>
+              <span class="kbd">R</span><span>复位（回四轮起点）</span>
+              <span class="kbd">1 2 3 4</span><span>切到 仿真运行 / 模型配置 / 数据绘图 / 使用说明</span>
+            </div>
+          </div>
+
+          <div class="box">
+            <h4>存储路径</h4>
+            <div class="usedoc">
+              <div class="drow"><b>场景</b><span class="mono">wbr_bench_store/scenarios/&lt;名称&gt;.json</span></div>
+              <div class="drow"><b>固化检查点</b><span class="mono">wbr_bench_store/saved/</span></div>
+              <div class="drow"><b>运行日志</b><span class="mono">wbr_bench_store/runs/&lt;时间戳&gt;_switch/console.log</span></div>
+              <div class="drow"><b>遥测数据</b><span class="mono">legged_gym/scripts/wbr_play_data/wbr_*_tel_&lt;时间戳&gt;.tsv</span></div>
+              <div class="drow"><b>权重</b><span><span class="mono">releases/&lt;实验&gt;/model_&lt;迭代&gt;.pt</span><br><span class="mono">logs/&lt;task&gt;/&lt;run&gt;/model_*.pt</span></span></div>
+              <div class="drow"><b>控制台设置</b><span><span class="mono">wbr_bench_store/settings.json</span><br><span class="muted">双模式 / 单策略 / 参数 / 主题 / 导航位</span></span></div>
+            </div>
+          </div>
+
+          <div class="box" style="grid-column:1/-1">
+            <h4>相位编号（统一 0–11）</h4>
+            <div class="usedoc">
+              <div class="drow"><b>总览</b><span>统一相位贯穿「两轮 / 跳跃 / 四轮 / 起立 / 趴下」，是 sim2sim / sim2real 共用的状态编号。数据绘图的「相位」图纵轴、仿真运行页的相位号都按此编号；相位图纵轴只印数字，<b>鼠标扫过「相位」图标题</b>即可浮出编号↔中文对照。</span></div>
+              <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.3rem .55rem;font-size:.72rem;line-height:1.55">
+                <span><b>0</b> 两轮待机</span>
+                <span><b>1</b> 预蹲</span>
+                <span><b>2</b> 爆发伸腿</span>
+                <span><b>3</b> 腾空收膝</span>
+                <span><b>4</b> 落地前伸腿</span>
+                <span><b>5</b> 缓冲</span>
+                <span><b>6</b> 四轮静稳</span>
+                <span><b>7</b> 起立转起</span>
+                <span><b>8</b> 起立交接</span>
+                <span><b>9</b> 趴下降高</span>
+                <span><b>10</b> 趴下探地</span>
+                <span><b>11</b> 趴下吸能</span>
+              </div>
+              <div class="drow"><b>跳跃 1–5</b><span>仅两轮可跳时进入（<code>1</code> 预蹲 → <code>2</code> 爆发伸腿 → <code>3</code> 腾空收膝 → <code>4</code> 落地前伸腿 → <code>5</code> 缓冲），跳完回到 <code>0</code> 两轮待机。</span></div>
+              <div class="drow"><b>旧模型说明</b><span>控制层内部相位是「重载」的（四轮/起立/趴下＝切换机 0–6，两轮＝跳跃机 0–5），已训练网络依赖其原值。控制台在显示与绘图时把它<b>补丁映射</b>到 0–11；日志同时保留原始 <code>ph</code> 与统一 <code>uni_ph</code>，新模型今后原生输出 0–11。</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- ============================ 弹窗：检查点选择器 ============================ -->
+<dialog class="modal" id="dlgPicker">
+  <div class="modal-head"><h3 id="pickerTitle">选择 checkpoint</h3><button class="x" data-close>×</button></div>
+  <div class="modal-body">
+    <div class="picker-filter">
+      <input class="input" type="text" id="pickerSearch" placeholder="搜索模型名 / 路径…">
+      <select class="input" id="pickerSource">
+        <option value="all">全部来源</option>
+        <option value="releases">releases</option>
+        <option value="logs">logs</option>
+        <option value="saved">saved（固化）</option>
+      </select>
+      <label class="tgl"><input type="checkbox" id="pickerFavOnly"> 只看收藏</label>
+      <label class="tgl"><input type="checkbox" id="pickerMatchOnly" checked> 只看维度匹配</label>
+      <span class="spacer"></span>
+      <span class="badge" id="pickerReq">需要 obs —</span>
+    </div>
+    <div style="max-height:52vh;overflow:auto">
+      <table class="picker-table">
+        <thead><tr><th>模型</th><th>checkpoint</th><th>obs·act</th><th>大小</th><th>来源</th><th>日期</th><th>路径</th></tr></thead>
+        <tbody id="pickerBody"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <span class="muted" style="font-size:.7rem;margin-right:auto" id="pickerHint">维度不匹配的行不可选</span>
+    <button class="btn" data-close>取消</button>
+  </div>
+</dialog>
+
+<!-- ==================== 弹窗：保存 / 覆写场景（通用） ==================== -->
+<dialog class="modal" id="dlgSaveScenario">
+  <div class="modal-head"><h3 id="saveDlgTitle">保存场景</h3><button class="x" data-close>×</button></div>
+  <div class="modal-body">
+    <div class="field">
+      <label>场景名称</label>
+      <input class="input" type="text" id="saveName" placeholder="例如：起立调参_v3">
+      <span class="hint" id="saveDlgHint">保存到 <span class="mono">wbr_bench_store/scenarios/&lt;名称&gt;.json</span></span>
+    </div>
+    <div class="field">
+      <label>内容预览</label>
+      <div class="mono muted" style="font-size:.68rem;line-height:1.6" id="savePreview"></div>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn" data-close>取消</button>
+    <button class="btn pri" id="saveConfirm">保存</button>
+  </div>
+</dialog>
+
+<!-- ============================ 弹窗：确认删除 ============================ -->
+<dialog class="modal" id="dlgConfirmDel">
+  <div class="modal-head"><h3 id="delDlgTitle">确认删除</h3><button class="x" data-close>×</button></div>
+  <div class="modal-body">
+    <div id="delDlgMsg" style="font-size:.82rem;line-height:1.7"></div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn" data-close>取消</button>
+    <button class="btn danger" id="delConfirm">删除</button>
+  </div>
+</dialog>
+
+<div id="toast" style="position:fixed;right:1rem;bottom:1rem;z-index:99;display:flex;flex-direction:column;gap:.4rem;align-items:flex-end"></div>
+
+<script src="mock.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

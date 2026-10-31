@@ -1,0 +1,150 @@
+{
+  "app": {
+    "name": "WBR Console",
+    "cn": "WBR 控制台",
+    "version": "0.1.0-p1",
+    "endpoint": "127.0.0.1:8770",
+    "store": "legged_gym/scripts/wbr_bench_store",
+    "note": "P1 静态前端 · 全部为演示数据"
+  },
+  "sim": {
+    "status": "idle",
+    "statusText": "仿真未启动",
+    "pid": null,
+    "fps": 0.0,
+    "gpu": { "used": 5.8, "total": 8.0 },
+    "trainingDetected": { "pid": 385677, "task": "wbr_switch", "note": "训练占用显卡，按项目纪律拦截启动" },
+    "telemetry": { "file": "wbr_switch_tel_—", "rows": 0 }
+  },
+  "modes": [
+    { "key": "switch", "cn": "模式切换（四槽）" },
+    { "key": "single", "cn": "单策略回放" }
+  ],
+  "currentMode": "switch",
+  "slots": [
+    {
+      "key": "fourw", "stage": "① 四轮行驶", "obs": 164, "act": 6,
+      "model": "P7F3e_yaw1_dr15", "ckpt": "model_11800.pt",
+      "path": "releases/P7F3e_yaw1_dr15/model_11800.pt",
+      "exists": true, "obsMatch": true, "sizeMB": 6.0,
+      "sha": "a1c9f0e37b42d8e5", "source": "releases",
+      "role": "四轮行驶 / 四轮站立"
+    },
+    {
+      "key": "standup", "stage": "② 起立", "obs": 173, "act": 6,
+      "model": "P7S1b_standup", "ckpt": "model_1300.pt",
+      "path": "releases/P7S1b_standup/model_1300.pt",
+      "exists": true, "obsMatch": true, "sizeMB": 6.1,
+      "sha": "5be17c2a90f413dd", "source": "releases",
+      "role": "起立（4W → 2W）"
+    },
+    {
+      "key": "w3", "stage": "③ 两轮站立/行走", "obs": 161, "act": 6,
+      "model": "W3_vlim085", "ckpt": "model_2200.pt",
+      "path": "releases/W3_vlim085/model_2200.pt",
+      "exists": true, "obsMatch": true, "sizeMB": 6.0,
+      "sha": "c07d8a4f1e2b6931", "source": "releases",
+      "role": "两轮站立 / 行走平衡"
+    },
+    {
+      "key": "lie", "stage": "④ 趴下", "obs": 173, "act": 6,
+      "model": "P7L_liedown", "ckpt": "model_300.pt",
+      "path": "releases/P7L_liedown/model_300.pt",
+      "exists": true, "obsMatch": true, "sizeMB": 6.1,
+      "sha": "3f91e6b05d7c2a84", "source": "releases",
+      "role": "趴下（2W → 4W）"
+    }
+  ],
+  "chainParams": [
+    { "key": "t_hold4w", "label": "四轮停留", "value": "2.0", "unit": "s" },
+    { "key": "t_hold2w", "label": "两轮保持", "value": "8.0", "unit": "s" },
+    { "key": "blend", "label": "腿目标混合", "value": "0.30", "unit": "s" },
+    { "key": "loop", "label": "循环", "value": "关", "unit": "" },
+    { "key": "auto", "label": "自动演示", "value": "开", "unit": "" }
+  ],
+  "single": {
+    "task": "wbr_flat", "run": "Oct24_18-20-19_F1", "ckpt": "model_1200",
+    "obs": 164, "act": 6, "obsMatch": true
+  },
+  "scenarios": [
+    {
+      "id": "p7s1b_official", "name": "P7S1b 官方组合", "mode": "switch",
+      "when": "10-25 20:40", "active": true,
+      "slots": {
+        "fourw": "releases/P7F3e_yaw1_dr15/model_11800.pt",
+        "standup": "releases/P7S1b_standup/model_1300.pt",
+        "w3": "releases/W3_vlim085/model_2200.pt",
+        "lie": "releases/P7L_liedown/model_300.pt"
+      },
+      "params": { "t_hold4w": 2.0, "t_hold2w": 8.0, "blend": 0.30, "loop": false, "auto": true }
+    },
+    {
+      "id": "fourw_fast", "name": "四轮直行_快速", "mode": "single",
+      "when": "10-24 18:02", "active": false,
+      "single": { "task": "wbr_flat4", "run": "Oct24_18-20-19_F1", "ckpt": "model_1200" },
+      "params": {}
+    },
+    {
+      "id": "standup_v2", "name": "起立调参_v2", "mode": "switch",
+      "when": "10-24 21:15", "active": false,
+      "slots": {
+        "fourw": "releases/P7F3e_yaw1_dr15/model_11800.pt",
+        "standup": "logs/wbr_switch/Oct25_19-46-41_P7S3/model_950.pt",
+        "w3": "releases/W3_vlim085/model_2200.pt",
+        "lie": "releases/P7L_liedown/model_300.pt"
+      },
+      "params": { "t_hold4w": 2.0, "t_hold2w": 10.0, "blend": 0.30, "loop": true, "auto": true }
+    }
+  ],
+  "checkpoints": [
+    { "path": "releases/P7F3e_yaw1_dr15/model_11800.pt", "model": "P7F3e_yaw1_dr15", "ckpt": "model_11800.pt", "obs": 164, "act": 6, "sizeMB": 6.0, "source": "releases", "when": "10-25", "favorite": true },
+    { "path": "releases/P7S1b_standup/model_1300.pt", "model": "P7S1b_standup", "ckpt": "model_1300.pt", "obs": 173, "act": 6, "sizeMB": 6.1, "source": "releases", "when": "10-25", "favorite": true },
+    { "path": "releases/W3_vlim085/model_2200.pt", "model": "W3_vlim085", "ckpt": "model_2200.pt", "obs": 161, "act": 6, "sizeMB": 6.0, "source": "releases", "when": "10-22", "favorite": true },
+    { "path": "releases/P7L_liedown/model_300.pt", "model": "P7L_liedown", "ckpt": "model_300.pt", "obs": 173, "act": 6, "sizeMB": 6.1, "source": "releases", "when": "10-25", "favorite": true },
+    { "path": "releases/P7S_standup/model_500.pt", "model": "P7S_standup", "ckpt": "model_500.pt", "obs": 173, "act": 6, "sizeMB": 6.1, "source": "releases", "when": "10-25", "favorite": false },
+    { "path": "logs/wbr_switch/Oct25_19-46-41_P7S3/model_950.pt", "model": "P7S3", "ckpt": "model_950.pt", "obs": 173, "act": 6, "sizeMB": 6.1, "source": "logs", "when": "10-25", "favorite": false },
+    { "path": "logs/wbr_switch/Oct25_18-05-36_P7S2/model_800.pt", "model": "P7S2", "ckpt": "model_800.pt", "obs": 173, "act": 6, "sizeMB": 6.1, "source": "logs", "when": "10-25", "favorite": false },
+    { "path": "logs/wbr_flat/Oct24_01-00-32_W12_noise10/model_2900.pt", "model": "W12_noise10", "ckpt": "model_2900.pt", "obs": 161, "act": 6, "sizeMB": 6.0, "source": "logs", "when": "10-24", "favorite": false },
+    { "path": "logs/wbr_flat4/Oct24_18-20-19_F1/model_1200.pt", "model": "F1", "ckpt": "model_1200.pt", "obs": 164, "act": 6, "sizeMB": 6.0, "source": "logs", "when": "10-24", "favorite": false },
+    { "path": "logs/wbr_flat/Oct23_21-52-01_P6R81_goalv2/model_4500.pt", "model": "P6R81_goalv2", "ckpt": "model_4500.pt", "obs": 161, "act": 6, "sizeMB": 6.0, "source": "logs", "when": "10-23", "favorite": false },
+    { "path": "logs/wbr_flat/Oct21_16-44-48_P6R71_airleg200_hot/model_2700.pt", "model": "P6R71_airleg200_hot", "ckpt": "model_2700.pt", "obs": 161, "act": 6, "sizeMB": 6.0, "source": "logs", "when": "10-21", "favorite": false }
+  ],
+  "saved": [
+    { "name": "P7S1b_standup__model_1300", "path": "saved/P7S1b_standup__model_1300/", "obs": 173, "act": 6, "sizeMB": 6.1, "when": "10-25 20:31", "sha": "5be17c2a90f413dd" },
+    { "name": "P7F3e_yaw1_dr15__model_11800", "path": "saved/P7F3e_yaw1_dr15__model_11800/", "obs": 164, "act": 6, "sizeMB": 6.0, "when": "10-25 20:29", "sha": "a1c9f0e37b42d8e5" }
+  ],
+  "logs": [
+    { "name": "wbr_switch_tel_2026-10-25_20-46-12.tsv", "when": "10-25 20:46", "modelTag": "P7S1b 官方组合 · 4 槽", "current": true },
+    { "name": "wbr_switch_tel_2026-10-24_19-10-03.tsv", "when": "10-24 19:10", "modelTag": "起立调参_v2 · 4 槽", "current": false },
+    { "name": "wbr_switch_tel_2026-10-24_17-32-48.tsv", "when": "10-24 17:32", "modelTag": "P7S_standup · 4 槽", "current": false }
+  ],
+  "preflight": [
+    { "level": "ok", "text": "4/4 权重存在，sha256 已记录" },
+    { "level": "ok", "text": "obs/act 与槽位匹配（164/173/161/173 · act 6）" },
+    { "level": "ok", "text": "场景 JSON 参数合法（停留/保持/混合均为正）" },
+    { "level": "warn", "text": "显卡 5.8 / 8.0 GB，检测到训练进程 PID 385677 → 启动将被拦截" }
+  ],
+  "logLines": [
+    { "t": "20:44:01", "level": "info", "text": "WBR Console 启动 · 端口 8770 · 存储 legged_gym/scripts/wbr_bench_store" },
+    { "t": "20:44:02", "level": "info", "text": "扫描 checkpoint：logs 1131 个 · releases 12 个（仅 stat，未加载权重）" },
+    { "t": "20:44:02", "level": "ok", "text": "四槽权重全部存在，sha256 已记录" },
+    { "t": "20:44:03", "level": "warn", "text": "检测到训练进程 PID 385677（wbr_switch，GPU 5.8/8.0G）→ 按纪律拦截启动" }
+  ],
+  "consoleLines": [
+    "[wbr_bench_run] import play02 ...",
+    "[play02] 载入策略 releases/P7F3e_yaw1_dr15/model_11800.pt obs=164",
+    "[play02] 载入策略 releases/P7S1b_standup/model_1300.pt obs=173",
+    "[play02] 载入策略 releases/W3_vlim085/model_2200.pt obs=161",
+    "[play02] 载入策略 releases/P7L_liedown/model_300.pt obs=173",
+    "🚀 [play02 遥测采集·switch] 已启动（四轮 ⇄ 起立 ⇄ 两轮站立）"
+  ],
+  "reproduce": "cd legged_gym/scripts && python wbr_bench_run.py \\\n  --play_mode switch \\\n  --fourw_checkpoint releases/P7F3e_yaw1_dr15/model_11800.pt \\\n  --standup_checkpoint releases/P7S1b_standup/model_1300.pt \\\n  --w3_checkpoint releases/W3_vlim085/model_2200.pt \\\n  --lie_checkpoint releases/P7L_liedown/model_300.pt",
+  "telemetryPreview": {
+    "modes": [
+      { "name": "四轮", "color": "#dbeafe" },
+      { "name": "起立", "color": "#d1fae5" },
+      { "name": "两轮", "color": "#fef3c7" },
+      { "name": "趴下", "color": "#ede9fe" }
+    ]
+  }
+}
