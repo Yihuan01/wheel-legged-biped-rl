@@ -1,6 +1,6 @@
 # WBR 轮腿双足机器人 · 强化学习控制
 
-![WBR 轮腿双足机器人](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/hero-console.jpg)
+<img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/hero-robot.jpg" alt="WBR 轮腿双足机器人" width="420">
 
 **WBR 是一台双模式轮腿双足机器人**：两个驱动轮 + 两侧各一条两连杆腿（髋 + 膝），外加被动万向轮。
 四种轮腿运动能力——两轮行走、跳跃、四轮行驶、模式切换——由强化学习一体训练，全部在 Isaac Gym 中完成。
