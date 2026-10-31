@@ -1,6 +1,6 @@
 # Wheel-Legged Biped Locomotion with RL
 
-<img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/hero-robot.jpg" alt="WBR wheel-legged biped robot" width="420">
+<p align="center"><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/hero-robot.jpg" alt="WBR wheel-legged biped robot" width="420"></p>
 
 **WBR is a dual-mode wheel-legged biped robot**: two driven wheels with a two-link leg on each
 side (hip + knee), plus a passive caster. Four wheel-legged capabilities — two-wheel walking,
