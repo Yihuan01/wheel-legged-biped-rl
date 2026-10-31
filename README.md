@@ -26,11 +26,24 @@
 
 ## 功能演示
 
-| **四轮行驶**（`P7F3e`） | **两轮行走**（`P6R81`） |
-|---|---|
-| ![四轮行驶](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/fourw_drive.gif) | ![两轮行走](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/twow_walk.gif) |
-| **跳跃**（`P6R81`） | **起立 / 趴下**（`P7T` 脚本 + `P7L`） |
-| ![跳跃](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/jump.gif) | ![起立趴下](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/standup.gif) |
+<table>
+<tr>
+<th>四轮行驶（<code>P7F3e</code>）</th>
+<th>两轮行走（<code>P6R81</code>）</th>
+</tr>
+<tr>
+<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/fourw_drive.gif" alt="四轮行驶"></td>
+<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/twow_walk.gif" alt="两轮行走"></td>
+</tr>
+<tr>
+<th>跳跃（<code>P6R81</code>）</th>
+<th>起立 / 趴下（<code>P7T</code> 脚本 + <code>P7L</code>）</th>
+</tr>
+<tr>
+<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/jump.gif" alt="跳跃"></td>
+<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/standup.gif" alt="起立趴下"></td>
+</tr>
+</table>
 
 ## 网页控制台
 
@@ -44,11 +57,24 @@
 - **数据绘图** —— 遥测曲线：速度、轮/腿状态、力矩与相位，可读运行中的仿真或已存的 TSV 日志。
 - **使用说明** —— 参数词典、快捷键与存储路径。
 
-| 仿真运行 | 模型配置 |
-|---|---|
-| ![仿真运行](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-run.png) | ![模型配置](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-model.png) |
-| **数据绘图** | **使用说明** |
-| ![数据绘图](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-plot.png) | ![使用说明](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-help.png) |
+<table>
+<tr>
+<th>仿真运行</th>
+<th>模型配置</th>
+</tr>
+<tr>
+<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-run.png" alt="仿真运行"></td>
+<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-model.png" alt="模型配置"></td>
+</tr>
+<tr>
+<th>数据绘图</th>
+<th>使用说明</th>
+</tr>
+<tr>
+<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-plot.png" alt="数据绘图"></td>
+<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-help.png" alt="使用说明"></td>
+</tr>
+</table>
 
 ## 环境要求
 

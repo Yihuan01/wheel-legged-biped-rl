@@ -28,11 +28,24 @@ each with a two-link leg (hip + knee, 3 DoF per side) plus a passive caster.
 
 ## Demos
 
-| **Four-wheel driving** (`P7F3e`) | **Two-wheel walking** (`P6R81`) |
-|---|---|
-| ![Four-wheel driving](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/fourw_drive.gif) | ![Two-wheel walking](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/twow_walk.gif) |
-| **Jump** (`P6R81`) | **Stand-up / lie-down** (`P7T` script + `P7L`) |
-| ![Jump](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/jump.gif) | ![Stand-up and lie-down](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/standup.gif) |
+<table>
+<tr>
+<th>Four-wheel driving (<code>P7F3e</code>)</th>
+<th>Two-wheel walking (<code>P6R81</code>)</th>
+</tr>
+<tr>
+<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/fourw_drive.gif" alt="Four-wheel driving"></td>
+<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/twow_walk.gif" alt="Two-wheel walking"></td>
+</tr>
+<tr>
+<th>Jump (<code>P6R81</code>)</th>
+<th>Stand-up / lie-down (<code>P7T</code> script + <code>P7L</code>)</th>
+</tr>
+<tr>
+<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/jump.gif" alt="Jump"></td>
+<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/standup.gif" alt="Stand-up and lie-down"></td>
+</tr>
+</table>
 
 ## Web console
 
@@ -49,11 +62,24 @@ each with a two-link leg (hip + knee, 3 DoF per side) plus a passive caster.
   running simulation or a saved TSV log.
 - **Reference** — parameter glossary, shortcuts and storage paths.
 
-| Simulation run | Model configuration |
-|---|---|
-| ![Simulation run](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-run.png) | ![Model configuration](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-model.png) |
-| **Telemetry plots** | **Reference** |
-| ![Telemetry plots](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-plot.png) | ![Reference](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-help.png) |
+<table>
+<tr>
+<th>Simulation run</th>
+<th>Model configuration</th>
+</tr>
+<tr>
+<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-run.png" alt="Simulation run"></td>
+<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-model.png" alt="Model configuration"></td>
+</tr>
+<tr>
+<th>Telemetry plots</th>
+<th>Reference</th>
+</tr>
+<tr>
+<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-plot.png" alt="Telemetry plots"></td>
+<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-help.png" alt="Reference"></td>
+</tr>
+</table>
 
 ## Requirements
 
