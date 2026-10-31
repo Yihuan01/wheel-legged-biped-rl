@@ -1,9 +1,13 @@
 # Wheel-Legged Biped Locomotion with RL
 
-**Two wheels, four hip/knee joints, one policy.** Learned walking, jumping, four-wheel driving and
-on-command mode switching, trained in Isaac Gym.
+![WBR wheel-legged biped robot](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/robot-stand.jpg)
 
-[中文说明](README.zh-CN.md) · Simulation only — nothing here has been validated on hardware.
+**WBR is a dual-mode wheel-legged biped robot**: two driven wheels with a two-link leg on each
+side (hip + knee), plus a passive caster. Four wheel-legged capabilities — two-wheel walking,
+jumping, four-wheel driving and on-command mode switching — are learned end-to-end with
+reinforcement learning in Isaac Gym.
+
+[中文说明](README.zh-CN.md)
 
 > **This repository is a personal learning record.** It documents my training runs and the
 > checkpoints they produced; it is not a polished framework and comes with no support.
@@ -25,16 +29,16 @@ each with a two-link leg (hip + knee, 3 DoF per side) plus a passive caster.
 
 ## Demos
 
-Each mode, recorded from the Isaac Gym viewer with the released demo weights. The clips are
+Each mode as an animated clip, recorded with the released demo weights in Isaac Gym. The GIFs are
 attached to the [demo-media-v1 release](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/tag/demo-media-v1)
 so cloning the repository does not carry them:
 
 | | |
 |---|---|
 | **Four-wheel driving** (`P7F3e`) | **Two-wheel walking** (`P6R81`) |
-| <video src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/fourw_drive.mp4" controls preload="none"></video> | <video src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/twow_walk.mp4" controls preload="none"></video> |
+| ![Four-wheel driving](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/fourw_drive.gif) | ![Two-wheel walking](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/twow_walk.gif) |
 | **Jump** (`P6R81`) | **Stand-up / lie-down** (`P7T` script + `P7L`) |
-| <video src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/jump.mp4" controls preload="none"></video> | <video src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/standup.mp4" controls preload="none"></video> |
+| ![Jump](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/jump.gif) | ![Stand-up and lie-down](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/standup.gif) |
 
 ## Web console
 

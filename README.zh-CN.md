@@ -1,8 +1,11 @@
-# WBR 轮足机器人 · 强化学习控制
+# WBR 轮腿双足机器人 · 强化学习控制
 
-**两个轮子，四组髋膝关节，一套策略。** 学会行走、跳跃、四轮行驶，并在运行中切换模式，全部在 Isaac Gym 中训练。
+![WBR 轮腿双足机器人](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/robot-stand.jpg)
 
-[English](README.md) · 仅仿真 —— 以下结果都未在实机上验证。
+**WBR 是一台双模式轮腿双足机器人**：两个驱动轮 + 两侧各一条两连杆腿（髋 + 膝），外加被动万向轮。
+四种轮腿运动能力——两轮行走、跳跃、四轮行驶、模式切换——由强化学习一体训练，全部在 Isaac Gym 中完成。
+
+[English](README.md)
 
 > **本仓库为个人学习记录使用**：记录我个人的训练过程与产出的权重，不是一个完善的框架，也不提供支持。
 > 仓库只保留 WBR 自身：从上游 `legged_gym` 继承的示例机器人（ANYmal、A1、Cassie 等）已全部移除，
@@ -10,7 +13,7 @@
 
 ## 概述
 
-一个**轮足双足机器人**的强化学习控制器：躯干由两个轮子支撑，每侧一条两连杆腿（髋 + 膝，单侧 3 自由度），
+一个**轮腿双足机器人**的强化学习控制器：躯干由两个轮子支撑，每侧一条两连杆腿（髋 + 膝，单侧 3 自由度），
 外加一个被动万向轮。
 
 | 能力 | 任务 | 做什么 |
@@ -25,16 +28,16 @@
 
 ## 功能演示
 
-每个模式一段，用已发布的演示权重在 Isaac Gym viewer 中实录。视频挂在
+每个模式一段动图，用已发布的演示权重在 Isaac Gym 中实录。GIF 挂在
 [demo-media-v1 release](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/tag/demo-media-v1)，
 克隆仓库不会带上它们：
 
 | | |
 |---|---|
 | **四轮行驶**（`P7F3e`） | **两轮行走**（`P6R81`） |
-| <video src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/fourw_drive.mp4" controls preload="none"></video> | <video src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/twow_walk.mp4" controls preload="none"></video> |
+| ![四轮行驶](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/fourw_drive.gif) | ![两轮行走](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/twow_walk.gif) |
 | **跳跃**（`P6R81`） | **起立 / 趴下**（`P7T` 脚本 + `P7L`） |
-| <video src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/jump.mp4" controls preload="none"></video> | <video src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/standup.mp4" controls preload="none"></video> |
+| ![跳跃](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/jump.gif) | ![起立趴下](https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/standup.gif) |
 
 ## 网页控制台
 
@@ -188,7 +191,7 @@ releases/              仅演示用最小权重集（F3e 四轮、R81 两轮/跳
   本仓库所基于的训练框架。
 - [**rsl_rl**](https://github.com/leggedrobotics/rsl_rl) v1.0.2 —— 本项目使用的 PPO 实现。
 - [**NVIDIA Isaac Gym**](https://developer.nvidia.com/isaac-gym) —— 物理仿真后端。
-- [**fgmn/Wheel_legged_gym**](https://github.com/fgmn/Wheel_legged_gym) —— 本工作扩展的轮足机器人基础。
+- [**fgmn/Wheel_legged_gym**](https://github.com/fgmn/Wheel_legged_gym) —— 本工作扩展的轮腿机器人基础。
 - [**OpenCode**](https://opencode.ai) —— 辅助开发、重构与文档撰写；代码经本人审核并负责。
 
 所有再分发的代码均保留原始许可证；见 [LICENSE](LICENSE)、[NOTICE](NOTICE) 与 `licenses/`。
