@@ -682,7 +682,7 @@ def run_single(args):
         "done=1 表示该步触发过重置(摔倒/超时)，该数据段不可当作连续轨迹",
     ]
 
-    log_fh, log_path = _open_log("wbr_tel", meta, notes, columns)
+    log_fh, log_path = _open_log("wbr_tel_isaac", meta, notes, columns)   # 文件名带引擎标注（2026-11-06）
     written = 0
     seg = []
 
@@ -1069,7 +1069,7 @@ def run_switch(args, task="wbr_switch"):
         "统一模板：与单策略同一份面板；vz_body/roll/jump/关节列按单策略口径补记（切换为瞬时摆位，跳跃过程数值多为 0）",
         f"四轮 F3e(164)，起立 P7S(173)，趴下 P7L(173)，两轮 {ctrl_2w}(161)；切换为瞬时摆位（非物理过渡）",
     ]
-    log_fh, log_path = _open_log("wbr_switch_tel", meta, notes, columns)
+    log_fh, log_path = _open_log("wbr_switch_tel_isaac", meta, notes, columns)   # 文件名带引擎标注（2026-11-06）
     written = 0
     seg = []
     _last_arm_t = -99.0        # 上次装填跳时刻（连跳限流用）

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>WBR Console · WBR 控制台</title>
 <script>(function(){try{var t=localStorage.getItem('wbr.theme');t=t?JSON.parse(t):'system';if(t!=='light'&&t!=='dark'&&t!=='system')t='system';document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','system');}})();</script>
-<link rel="stylesheet" href="app.css?v=20261106o">
+<link rel="stylesheet" href="app.css?v=20261106r">
 </head>
 <body>
 <div class="app" id="app" data-nav="left">
@@ -104,8 +104,8 @@
             <select class="input" id="plotLog" style="max-width:22rem"></select>
             <button class="btn sm" id="plotRefresh" title="重新拉取最新遥测文件列表（新跑的仿真会出现在最上面）">↻ 刷新</button>
             <span class="kindbadge" id="plotKind">—</span>
-            <div class="cfgchip" id="plotCfgChip" title="查看这份录像使用的模型配置">
-              <span>模型配置</span><b id="plotCfgName">—</b><span class="caret">▾</span>
+            <div class="cfgchip" id="plotCfgChip" title="查看这份录像使用的权重配置">
+              <span>权重配置</span><b id="plotCfgName">—</b><span class="caret">▾</span>
             </div>
             <span class="spacer"></span>
             <button class="btn sm" id="plotSavePage">保存整页</button>
@@ -131,26 +131,27 @@
         <div class="plot-grid" id="plotGrid"></div>
       </section>
 
-      <!-- ======================= 页面 3：模型配置 ======================= -->
+      <!-- ======================= 页面 3：IsaacGym 配置 ======================= -->
       <section class="page" data-page="model" id="page-model">
         <div class="pagehead">
-          <h3>模型配置</h3>
+          <h3>IsaacGym 配置</h3>
           <span class="muted" style="font-size:.76rem">当前模式：<b id="modelModeName">双模式</b></span>
           <span class="spacer"></span>
-          <button class="btn" id="btnCheck2" data-mj-locked data-mj-why="MuJoCo 请用「MuJoCo 配置页」配置与启动">校验</button>
+          <span class="engine-badge lit is-isaac">● ENGINE: Isaac Gym</span>
+          <button class="btn" id="btnCheck2" data-mj-locked data-mj-why="MuJoCo 请用「MuJoCo 配置页」配置与启动">预检</button>
           <button class="btn" id="btnSaveScenario" data-mj-locked data-mj-why="场景/槽位为 Isaac 专属">保存场景</button>
           <button class="btn pri" id="btnStart2" data-mj-locked data-mj-why="MuJoCo 请用「MuJoCo 配置页」配置与启动">启动仿真</button>
         </div>
 
+        <div class="box pf-wide">
+          <h4>启动预检 <span class="badge">先预检再启动</span></h4>
+          <div class="checks two" id="preflight"></div>
+        </div>
         <div class="model-layout">
-          <!-- 左栏：启动预检 + 场景管理 / 检查点库（后两块均分剩余高度、块内滚动，空时也不塌陷） -->
+          <!-- 左栏：场景与运行 / 检查点库（均分剩余高度、块内滚动）；启动预检已上移为页首全宽卡 -->
           <aside class="model-side">
-            <div class="box pf-box">
-              <h4>启动预检</h4>
-              <div class="checks" id="preflight"></div>
-            </div>
             <div class="box grow">
-              <h4>场景管理 <span class="badge">scenarios/</span></h4>
+              <h4>场景与运行 <span class="badge">scenarios/</span></h4>
               <div class="list scroll" id="scenarioList"></div>
             </div>
             <div class="box grow">
@@ -159,7 +160,7 @@
             </div>
           </aside>
 
-          <!-- 右栏：模型配置 —— 双模式（上）/ 单策略（下）两个分区，各带标题栏分隔 -->
+          <!-- 右栏：IsaacGym 配置 —— 双模式（上）/ 单策略（下）两个分区，各带标题栏分隔 -->
           <div class="model-main">
             <section class="cfg-card" data-mode="uni">
               <div class="cfg-head">
@@ -227,8 +228,19 @@
           <span class="muted" style="font-size:.76rem">槽位化：四轮 164 / 两轮行走 161 / 两轮跳跃 161 / 趴下 173 / 五槽链 · 纯 CPU 可与训练并行 · 与运行页共用同一份设置</span>
           <span class="spacer"></span>
           <span class="engine-badge lit is-mujoco">● ENGINE: MuJoCo</span>
+          <button class="btn" id="cfxCheckBtn">预检</button>
+          <button class="btn pri" id="cfxStartBtn">启动仿真</button>
         </div>
 
+      <div class="box mj-box pf-wide">
+        <h4>启动预检 <span class="badge">先预检再启动</span></h4>
+        <div class="bd">
+          <div class="checks two" id="cfxChecks"><span class="muted" style="font-size:.74rem">点「预检」检查解释器 / MJCF / 权重与契约 / 端口</span></div>
+          <div class="mj-row">
+            <button class="btn" id="cfxExportBtn" title="把最新一次录制（eval/runs 下带 telemetry.tsv）画成 vx/高度/姿态三联图 PNG">导出图（最新录制）</button>
+          </div>
+        </div>
+      </div>
         <div class="mj-grid">
           <div class="box mj-box">
             <h4>模型与资产</h4>
@@ -241,7 +253,7 @@
                     <option value="jump">③ 两轮跳跃 · 161（P8J3d · wbr_v1）</option>
                     <option value="lie">④ 趴下 · 173（P7L · wbr_v2）</option>
                     <option value="uni">⛓ 五槽链 · 两轮起步（行走→跳→趴下→四轮）</option>
-                    <option value="uni4">⛓ 五槽链 · 四轮起步（含 P7T 起立，起立未收口）</option>
+                    <option value="uni4">⛓ 五槽链 · 四轮起步（含 P7T2 平台式起立）</option>
                   </select>
                 </label>
                 <label class="mjf" id="cfxChainBox" hidden><span>链起始</span>
@@ -305,28 +317,16 @@
                 <label class="tgl"><input type="checkbox" id="cfxRecord" checked> 录制 TSV</label>
                 <label class="tgl"><input type="checkbox" id="cfxWindow" checked> 开窗口</label>
               </div>
-              <div class="kv muted" style="font-size:.7rem">初始姿态＝MJCF 契约初值（四轮 0.19 / 两轮 0.275 站姿）；录制落 <span class="mono">sim2sim_mujoco/eval/runs/</span>，导出图按该目录取最新。</div>
+              <div class="kv muted" style="font-size:.7rem">初始姿态＝MJCF 契约初值（四轮 0.19 / 两轮 0.25）；录制落 <span class="mono">sim2sim_mujoco/eval/runs/</span>，导出图按该目录取最新。</div>
             </div>
           </div>
+      <div class="box mj-box span2">
+        <h4>上次 S0 对账（静态链路三对齐，golden 只读）</h4>
+        <div class="bd"><div class="kv" id="cfxParity">读取中…</div></div>
+      </div>
         </div>
 
-        <div class="box mj-box">
-          <h4>启动预检</h4>
-          <div class="bd">
-            <div class="checks" id="cfxChecks"><span class="muted" style="font-size:.74rem">点「预检」检查解释器 / MJCF / 权重与契约 / 端口</span></div>
-            <div class="mj-row">
-              <button class="btn" id="cfxCheckBtn">预检</button>
-              <button class="btn" id="cfxExportBtn" title="把最新一次录制（eval/runs 下带 telemetry.tsv）画成 vx/高度/姿态三联图 PNG">导出图（最新录制）</button>
-              <span class="spacer"></span>
-              <button class="btn pri" id="cfxStartBtn">启动仿真（去运行页控制）</button>
-            </div>
-          </div>
-        </div>
 
-        <div class="box mj-box">
-          <h4>上次 S0 对账（静态链路三对齐，golden 只读）</h4>
-          <div class="bd"><div class="kv" id="cfxParity">读取中…</div></div>
-        </div>
       </section>
 
       <!-- ======================= 页面 5：使用说明 ======================= -->
@@ -374,21 +374,21 @@
               <span class="kbd">空格</span><span>指令重置到当前模式默认位</span>
               <span class="kbd">M</span><span>切换 四轮 / 起立 / 两轮 / 趴下（链模式＝切槽请求）</span>
               <span class="kbd">R</span><span>复位（回四轮起点）</span>
-              <span class="kbd">1 2 3 4 5</span><span>切到 仿真运行 / 模型配置 / MuJoCo 配置 / 数据绘图 / 使用说明</span>
+              <span class="kbd">1 2 3 4 5</span><span>切到 仿真运行 / IsaacGym 配置 / MuJoCo 配置 / 数据绘图 / 使用说明</span>
             </div>
           </div>
 
           <div class="box">
             <h4>存储路径</h4>
             <div class="usedoc">
-              <div class="drow"><b>场景</b><span class="mono">wbr_bench_store/scenarios/&lt;名称&gt;.json</span>（git 跟踪）</div>
-              <div class="drow"><b>固化检查点</b><span class="mono">wbr_bench_store/saved/</span></div>
-              <div class="drow"><b>运行日志</b><span class="mono">wbr_bench_store/runs/&lt;时间戳&gt;_&lt;引擎&gt;/console.log</span>（保留近 7 天，例行清理）</div>
-              <div class="drow"><b>遥测数据</b><span class="mono">legged_gym/scripts/wbr_play_data/wbr_*_tel_&lt;时间戳&gt;.tsv</span>（Isaac）＋ <span class="mono">wbr_tel_mj_&lt;时间戳&gt;.tsv</span>（MuJoCo）</div>
-              <div class="drow"><b>MuJoCo 落盘</b><span class="mono">sim2sim_mujoco/eval/runs/&lt;时间戳&gt;/</span>（telemetry.tsv＋summary.json）</div>
-              <div class="drow"><b>部署清单</b><span class="mono">sim2sim_mujoco/assets/DEPLOY_MANIFEST.json</span>（S5 冻结；重跑 <span class="mono">tools/make_manifest.py</span> 再生）</div>
-              <div class="drow"><b>权重</b><span><span class="mono">releases/&lt;实验&gt;/model_&lt;迭代&gt;.pt</span><br><span class="mono">logs/&lt;task&gt;/&lt;run&gt;/model_*.pt</span></span></div>
-              <div class="drow"><b>控制台设置</b><span><span class="mono">wbr_bench_store/settings.json</span><br><span class="muted">模式 / 参数 / 主题 / 导航位</span></span></div>
+              <div class="drow"><b>场景</b><span><span class="mono">wbr_bench_store/scenarios/&lt;名称&gt;.json</span> <span class="muted">（git 跟踪）</span></span></div>
+              <div class="drow"><b>固化检查点</b><span><span class="mono">wbr_bench_store/saved/</span></span></div>
+              <div class="drow"><b>运行日志</b><span><span class="mono">wbr_bench_store/runs/&lt;时间戳&gt;_&lt;引擎&gt;/console.log</span> <span class="muted">（每次启动自动重建）</span></span></div>
+              <div class="drow"><b>遥测数据</b><span>Isaac：<span class="mono">wbr_play_data/wbr_tel_isaac_&lt;时间戳&gt;.tsv</span>、<span class="mono">wbr_switch_tel_isaac_&lt;时间戳&gt;.tsv</span>；MuJoCo：<span class="mono">wbr_tel_mj_&lt;时间戳&gt;.tsv</span> <span class="muted">（文件名自带引擎标注）</span></span></div>
+              <div class="drow"><b>MuJoCo 落盘</b><span><span class="mono">sim2sim_mujoco/eval/runs/&lt;时间戳&gt;/</span> <span class="muted">（telemetry.tsv＋summary.json）</span></span></div>
+              <div class="drow"><b>部署清单</b><span><span class="mono">sim2sim_mujoco/assets/DEPLOY_MANIFEST.json</span> <span class="muted">（重跑 tools/make_manifest.py 再生）</span></span></div>
+              <div class="drow"><b>权重</b><span><span class="mono">releases/&lt;实验&gt;/model_&lt;迭代&gt;.pt</span> ＋ <span class="mono">logs/&lt;task&gt;/&lt;run&gt;/model_*.pt</span></span></div>
+              <div class="drow"><b>控制台设置</b><span><span class="mono">wbr_bench_store/settings.json</span> <span class="muted">（模式 / 参数 / 主题 / 导航位）</span></span></div>
             </div>
           </div>
 
@@ -486,6 +486,6 @@
 <div id="toast" style="position:fixed;right:1rem;bottom:1rem;z-index:99;display:flex;flex-direction:column;gap:.4rem;align-items:flex-end"></div>
 
 <script src="mock.js"></script>
-<script src="app.js?v=20261106o"></script>
+<script src="app.js?v=20261106r"></script>
 </body>
 </html>

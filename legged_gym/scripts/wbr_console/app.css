@@ -554,11 +554,14 @@ dialog.modal::backdrop { background: rgba(15, 17, 21, .45); backdrop-filter: blu
 /* ======================================================== 模型配置页（左右分区） */
 /* 左：启动预检 + 场景管理/检查点库（均分剩余高度、块内滚动，空时也不塌陷）；右：四槽/单策略上下两卡 */
 .page[data-page="model"].on { display: flex; flex-direction: column; height: 100%; min-height: 0; }
-.model-layout { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 20rem) minmax(0, 1fr); gap: .7rem; align-items: stretch; }
+.model-layout { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 20rem) minmax(0, 1fr); gap: .6rem; align-items: stretch; }
 .model-side { display: flex; flex-direction: column; gap: .6rem; min-width: 0; min-height: 0; }
-.model-side .box { min-width: 0; }
-.model-side .pf-box { flex: 0 0 auto; }
-.model-side .pf-box .checks { max-height: 9rem; overflow-y: auto; }
+.model-side .box { min-width: 0; padding: 0; overflow: hidden; }
+/* 【2026-11-06 卡片统一】aside 卡片采用与 use/mj 页一致的「标题带」样式 */
+.model-side .box > h4 { margin: 0; font-size: .82rem; font-weight: 600; padding: .5rem .7rem;
+  background: color-mix(in srgb, var(--primary) 10%, var(--card)); border-bottom: 1px solid var(--border); }
+.model-side .box > .checks, .model-side .box > .list { padding: .6rem .7rem; }
+   /* 【2026-11-06】预检结果完整展示，不裁剪 */
 .model-side .box.grow { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
 .model-side .box.grow > h4 { flex: 0 0 auto; }
 .model-side .box.grow .list.scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; padding-right: .15rem; }
@@ -648,6 +651,13 @@ body.engine-mujoco [data-mj-locked]:not([disabled]):hover {
 
 /* ============================================================ MuJoCo 配置页签（并入主导航） */
 .mj-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+/* 【2026-11-06】页首全宽预检卡（Isaac/MuJoCo 两页同位同宽），预检项分两栏 */
+.pf-wide { margin-bottom: .6rem; }
+.pf-wide > h4 { margin: 0; font-size: .82rem; font-weight: 600; padding: .5rem .7rem;
+  background: color-mix(in srgb, var(--primary) 10%, var(--card)); border-bottom: 1px solid var(--border); }
+.pf-wide > .bd, .pf-wide > .checks { padding: .6rem .7rem; }
+.pf-wide .checks.two { grid-template-columns: 1fr 1fr; column-gap: 1.6rem; }
+.span2 { grid-column: 1 / -1; }
 @media (max-width: 900px) { .mj-grid { grid-template-columns: 1fr; } }
 .mj-box { min-width: 0; }
 .mj-box > h4 {

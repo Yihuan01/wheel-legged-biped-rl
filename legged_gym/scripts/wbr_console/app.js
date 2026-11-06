@@ -116,7 +116,7 @@
     telLogs: []
   };
 
-  var TABS = [{ key: 'run', cn: '仿真运行' }, { key: 'model', cn: '模型配置' }, { key: 'mujoco', cn: 'MuJoCo 配置' }, { key: 'plot', cn: '数据绘图' }, { key: 'use', cn: '使用说明' }];
+  var TABS = [{ key: 'run', cn: '仿真运行' }, { key: 'model', cn: 'IsaacGym 配置' }, { key: 'mujoco', cn: 'MuJoCo 配置' }, { key: 'plot', cn: '数据绘图' }, { key: 'use', cn: '使用说明' }];
   // 【Sim2Sim P2】MuJoCo 场景预设（设计稿 §6）；h 量程按契约 [0.175, 0.245]
   var MJ_PRESETS = {
     stand: { vx: 0, yaw: 0, h: 0.19, label: '站定 0.19' }, walk03: { vx: 0.3, yaw: 0, h: 0.21, label: '走 0.3' },
@@ -1515,7 +1515,7 @@
     markDirty(true); drawOv();
   }
 
-  // ---- 模型配置胶囊 ----
+  // ---- 权重配置胶囊 ----
   function updateCfgChip() {
     var cfg = (PLOT.meta && PLOT.meta.config) || [];
     var nameEl = document.getElementById('plotCfgName');
@@ -1526,9 +1526,9 @@
     chip.onclick = function (ev) {
       ev.stopPropagation();
       var exist = document.getElementById('cfgPop'); if (exist) { exist.remove(); return; }
-      if (!cfg.length) { toast('这份录像没有记录模型配置', 'warn'); return; }
+      if (!cfg.length) { toast('这份录像没有记录权重配置', 'warn'); return; }
       var box = el('div', { class: 'cfgpop', id: 'cfgPop' });
-      box.appendChild(el('h5', { text: '这份录像的模型配置' }));
+      box.appendChild(el('h5', { text: '这份录像的权重配置' }));
       cfg.forEach(function (c) {
         box.appendChild(el('div', { class: 'line' }, [
           el('span', { class: 'st', text: c.role }),
@@ -2560,7 +2560,7 @@
     document.getElementById('btnStart').addEventListener('click', function () { doStart(false); });
     document.getElementById('btnStart2').addEventListener('click', function () { doStart(false); });
     document.getElementById('btnStop').addEventListener('click', doStop);
-    document.getElementById('runScenarioPill').addEventListener('click', function () { switchTab('model'); toast('在「模型配置 → 场景管理」选择场景', 'ok'); });
+    document.getElementById('runScenarioPill').addEventListener('click', function () { switchTab('model'); toast('在「IsaacGym 配置 → 场景与运行」选择场景', 'ok'); });
     $$('.cfg-card').forEach(function (c) { c.addEventListener('click', function () { setMode(c.getAttribute('data-mode')); }); });
     $$('.cfg-use').forEach(function (b) { b.addEventListener('click', function (e) { e.stopPropagation(); setMode(b.getAttribute('data-mode')); }); });
     var smSel = document.getElementById('standupModeSel');

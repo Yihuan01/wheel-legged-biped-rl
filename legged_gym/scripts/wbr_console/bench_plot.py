@@ -127,7 +127,7 @@ def _run_start_epoch(run_id):
 
 def _config_from_run(tsv_name):
     """switch 日志 meta 只记了 4w/standup；两轮/趴下取自对应那次运行 spec.json 的四槽。"""
-    m = re.match(r"wbr_switch_tel_(\d{8}-\d{6})", tsv_name)
+    m = re.match(r"wbr_switch_tel(?:_isaac)?_(\d{8}-\d{6})", tsv_name)   # 兼容引擎标注（2026-11-06）
     if not m:
         return None
     log_epoch = _run_start_epoch(m.group(1))
