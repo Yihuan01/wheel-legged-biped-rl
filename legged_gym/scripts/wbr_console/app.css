@@ -558,8 +558,7 @@ dialog.modal::backdrop { background: rgba(15, 17, 21, .45); backdrop-filter: blu
 .model-side { display: flex; flex-direction: column; gap: .6rem; min-width: 0; min-height: 0; }
 .model-side .box { min-width: 0; padding: 0; overflow: hidden; }
 /* 【2026-11-06 卡片统一】aside 卡片采用与 use/mj 页一致的「标题带」样式 */
-.model-side .box > h4 { margin: 0; font-size: .82rem; font-weight: 600; padding: .5rem .7rem;
-  background: color-mix(in srgb, var(--primary) 10%, var(--card)); border-bottom: 1px solid var(--border); }
+
 .model-side .box > .checks, .model-side .box > .list { padding: .6rem .7rem; }
    /* 【2026-11-06】预检结果完整展示，不裁剪 */
 .model-side .box.grow { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; }
@@ -602,12 +601,7 @@ dialog.modal::backdrop { background: rgba(15, 17, 21, .45); backdrop-filter: blu
 
 /* ============================================================ 使用说明页 */
 .usegrid { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
-.usegrid .box { min-width: 0; padding: 0; overflow: hidden; }
-/* 每个区域标题行：浅蓝色底（与「模型配置」区域标题行同款：primary 10% 叠加卡片色） */
-.usegrid .box > h4 {
-  margin: 0; font-size: .82rem; font-weight: 600;
-  padding: .5rem .7rem; background: color-mix(in srgb, var(--primary) 10%, var(--card)); border-bottom: 1px solid var(--border);
-}
+
 .usegrid .box > .usedoc, .usegrid .box > .usehelp { padding: .6rem .7rem; }
 .usedoc { display: flex; flex-direction: column; gap: .5rem; }
 .usedoc .drow { display: grid; grid-template-columns: 7.5rem 1fr; gap: .55rem; font-size: .74rem; line-height: 1.6; }
@@ -650,20 +644,27 @@ body.engine-mujoco [data-mj-locked]:not([disabled]):hover {
 }
 
 /* ============================================================ MuJoCo 配置页签（并入主导航） */
+/* =====【2026-11-06 统一卡片样式】use／MuJoCo／Isaac 预检与侧栏卡片同一设计：
+   卡体 padding 0、标题带（.82rem、主色 10% 底、下边框）、分节体自带 padding ===== */
+.usegrid .box, .mj-box, .pf-wide, .model-side .box {
+  min-width: 0; padding: 0; overflow: hidden;
+}
+.usegrid .box > h4, .mj-box > h4, .pf-wide > h4, .model-side .box > h4 {
+  margin: 0; font-size: .82rem; font-weight: 600; padding: .5rem .7rem;
+  background: color-mix(in srgb, var(--primary) 10%, var(--card));
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: .4rem;
+}
 .mj-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
 /* 【2026-11-06】页首全宽预检卡（Isaac/MuJoCo 两页同位同宽），预检项分两栏 */
 .pf-wide { margin-bottom: .6rem; }
-.pf-wide > h4 { margin: 0; font-size: .82rem; font-weight: 600; padding: .5rem .7rem;
-  background: color-mix(in srgb, var(--primary) 10%, var(--card)); border-bottom: 1px solid var(--border); }
+
 .pf-wide > .bd, .pf-wide > .checks { padding: .6rem .7rem; }
 .pf-wide .checks.two { grid-template-columns: 1fr 1fr; column-gap: 1.6rem; }
 .span2 { grid-column: 1 / -1; }
 @media (max-width: 900px) { .mj-grid { grid-template-columns: 1fr; } }
-.mj-box { min-width: 0; }
-.mj-box > h4 {
-  margin: 0; font-size: .82rem; font-weight: 600;
-  padding: .5rem .7rem; background: color-mix(in srgb, var(--primary) 10%, var(--card)); border-bottom: 1px solid var(--border);
-}
+
+
 .mj-box > .bd { padding: .6rem .7rem; display: flex; flex-direction: column; gap: .5rem; }
 .mj-row { display: flex; flex-wrap: wrap; gap: .45rem .6rem; align-items: flex-end; }
 .mjf { display: flex; flex-direction: column; gap: .15rem; font-size: .7rem; color: var(--muted-foreground); }

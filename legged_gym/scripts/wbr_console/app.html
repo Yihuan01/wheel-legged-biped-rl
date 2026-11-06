@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>WBR Console · WBR 控制台</title>
 <script>(function(){try{var t=localStorage.getItem('wbr.theme');t=t?JSON.parse(t):'system';if(t!=='light'&&t!=='dark'&&t!=='system')t='system';document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','system');}})();</script>
-<link rel="stylesheet" href="app.css?v=20261106r">
+<link rel="stylesheet" href="app.css?v=20261106s">
 </head>
 <body>
 <div class="app" id="app" data-nav="left">
@@ -145,7 +145,9 @@
 
         <div class="box pf-wide">
           <h4>启动预检 <span class="badge">先预检再启动</span></h4>
-          <div class="checks two" id="preflight"></div>
+          <div class="bd">
+            <div class="checks two" id="preflight"></div>
+          </div>
         </div>
         <div class="model-layout">
           <!-- 左栏：场景与运行 / 检查点库（均分剩余高度、块内滚动）；启动预检已上移为页首全宽卡 -->
@@ -486,6 +488,6 @@
 <div id="toast" style="position:fixed;right:1rem;bottom:1rem;z-index:99;display:flex;flex-direction:column;gap:.4rem;align-items:flex-end"></div>
 
 <script src="mock.js"></script>
-<script src="app.js?v=20261106r"></script>
+<script src="app.js?v=20261106s"></script>
 </body>
 </html>
