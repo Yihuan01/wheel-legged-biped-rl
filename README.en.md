@@ -60,7 +60,7 @@ The terrain acceptance tasks reuse the `wbr_flat` policy — they are scenes, no
   in chain mode one-click stand-up / lie-down / load-jump / back-to-two-wheel / back-to-four-wheel /
   reset / slot-switch, with a command feedback bar and a settle gate (|vx|≤0.08 ∧ |pitch|≤5.7° for
   8 consecutive steps before any network switch), GPU status, and a dock for the native Isaac window.
-- **Model configuration / MuJoCo configuration** — slot-based: four-wheel 164 / two-wheel walk 161 /
+- **Isaac configuration / MuJoCo configuration** — slot-based: four-wheel 164 / two-wheel walk 161 /
   two-wheel jump 161 / lie-down 173 / five-slot chain (2-wheel or 4-wheel start), each slot one
   contract + asset + checkpoint; the MuJoCo chain supports a complex-terrain (four-quadrant demo) map;
   stand-up via the P7T2 script chain (default) or the P7S learned policy; per-phase timing parameters.
