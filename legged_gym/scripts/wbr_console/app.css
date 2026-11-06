@@ -405,7 +405,7 @@ select.input:focus, input.input:focus { outline: 2px solid color-mix(in srgb, va
 .pagehead { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin: .05rem 0 .6rem; }
 .pagehead h3 { margin: 0; font-size: .95rem; font-weight: 650; }
 
-.chain { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr; gap: .35rem; align-items: stretch; margin: .1rem 0 .6rem; }
+.chain { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr auto 1fr; gap: .35rem; align-items: stretch; margin: .1rem 0 .6rem; }
 .slot { background: var(--card); border: 1px solid var(--border); border-radius: calc(var(--radius) * .9); padding: .5rem .55rem; min-width: 0; display: flex; flex-direction: column; }
 .slot.hot { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary) inset; }
 .slot .stage { font-size: .64rem; color: var(--muted-foreground); letter-spacing: .03em; }
@@ -614,3 +614,66 @@ dialog.modal::backdrop { background: rgba(15, 17, 21, .45); backdrop-filter: blu
 .usedoc .drow > span > .mono { display: inline-block; }
 .usehelp { display: grid; grid-template-columns: auto 1fr; gap: .34rem .7rem; font-size: .74rem; align-items: center; }
 @media (max-width: 900px) { .usegrid { grid-template-columns: 1fr; } }
+
+/* ============================================================ Sim2Sim：引擎选择与置灰（P2/P3） */
+/* 引擎分段控件：与 .seg 同款，运行中按钮 disabled 锁定 */
+.engine-seg button[disabled] { opacity: .45; cursor: not-allowed; }
+/* 引擎徽标：未启动灰、运行中点亮（Isaac 橙 / MuJoCo 青）——设计稿 §2 */
+.engine-badge {
+  font-size: .7rem; font-weight: 700; letter-spacing: .04em;
+  padding: .18rem .6rem; border-radius: 999px; border: 1px solid var(--border);
+  color: var(--muted-foreground); background: var(--card); white-space: nowrap;
+}
+.engine-badge.lit.is-isaac { color: #e8842c; border-color: #e8842c; }
+.engine-badge.lit.is-mujoco { color: #17a2b8; border-color: #17a2b8; }
+/* 导航链接（MuJoCo 配置页入口）：与页签同形，末尾加外链箭头观感 */
+.nav-link {
+  display: inline-flex; align-items: center; text-decoration: none; color: var(--foreground);
+  font-size: .78rem; padding: .3rem .6rem; border-radius: 8px;
+}
+.nav-link:hover { background: var(--muted); }
+.nav-link::after { content: ' ↗'; font-size: .7rem; color: var(--muted-foreground); }
+
+/* ---- 引擎面板切换：MuJoCo 选中时隐藏 Isaac 专属启动件（面板切换，不受「置灰不隐藏」约束） ---- */
+body.engine-mujoco .isaac-only { display: none !important; }
+
+/* ---- 置灰矩阵（设计稿 §3）：MuJoCo 下用不到的控件置灰不隐藏，点击弹一次提示 ----
+   单点实现在 app.js applyEngineGuards（P3）：这里只管外观，交互层对 [data-mj-locked] 直接 return */
+body.engine-mujoco [data-mj-locked] {
+  opacity: .4; cursor: not-allowed; filter: grayscale(.4);
+}
+body.engine-mujoco [data-mj-locked]:not([disabled]):hover {
+  outline: 1px dashed var(--muted-foreground);
+}
+
+/* ============================================================ MuJoCo 配置页签（并入主导航） */
+.mj-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+@media (max-width: 900px) { .mj-grid { grid-template-columns: 1fr; } }
+.mj-box { min-width: 0; }
+.mj-box > h4 {
+  margin: 0; font-size: .82rem; font-weight: 600;
+  padding: .5rem .7rem; background: color-mix(in srgb, var(--primary) 10%, var(--card)); border-bottom: 1px solid var(--border);
+}
+.mj-box > .bd { padding: .6rem .7rem; display: flex; flex-direction: column; gap: .5rem; }
+.mj-row { display: flex; flex-wrap: wrap; gap: .45rem .6rem; align-items: flex-end; }
+.mjf { display: flex; flex-direction: column; gap: .15rem; font-size: .7rem; color: var(--muted-foreground); }
+.mjf.wide { flex: 1 1 16rem; }
+.kv { font-size: .74rem; line-height: 1.7; color: var(--muted-foreground); }
+/* 【链回执条】固定高度 + 内部滚动：内容行数变化不再改变 console 卡片高度，
+   否则 ResizeObserver→dockWindow 会随每条指令频繁重贴原生窗口（表现为窗口反应慢） */
+#mjChainBar {
+  height: 4.6rem;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  margin-top: .4rem;
+  padding: .3rem .45rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--muted);
+  font-size: .7rem;
+  line-height: 1.45;
+  contain: layout paint;          /* 隔离内部布局，不把高度变化传给父级 flex 链 */
+}
+#mjChainBar[hidden] { display: none; }
+.kv b { color: var(--foreground); }

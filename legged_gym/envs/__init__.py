@@ -40,17 +40,28 @@ from .wbr.flat.wbr_flat import WBRFlatMob
 from .wbr.flat.wbr_flat_config import WBRFlatCfg, WBRFlatCfgPPO
 task_registry.register("wbr_flat", WBRFlatMob, WBRFlatCfg(), WBRFlatCfgPPO())
 
+# ── 两轮：跳跃（P8J，与行走剥离）──────────────────────────────────────────────
+#   继承 WBRFlatCfg，只改跳跃指令采样键；奖励/观测/相位机与 R81 逐字一致。
+from .wbr.flat.wbr_jump_config import WBRJumpCfg, WBRJumpCfgPPO
+task_registry.register("wbr_jump", WBRFlatMob, WBRJumpCfg(), WBRJumpCfgPPO())
+
 # ── 两轮：随机起伏地形（观测仍 161 维，不放高程）──────────────────────────────
 #   地形由 terrain/*_gen.py 离线生成为 .npz，训练侧只读。
 #   wbr_demo / wbr_combo / wbr_elements 是同一份策略的演示与验收场景。
 from .wbr.flat.wbr_terrain_config import (WBRTerrainCfg, WBRTerrainCfgPPO,
                                           WBRDemoCfg, WBRDemoCfgPPO,
                                           WBRComboCfg, WBRComboCfgPPO,
-                                          WBRElementsCfg, WBRElementsCfgPPO)
+                                          WBRElementsCfg, WBRElementsCfgPPO,
+                                          WBRDropCfg, WBRDropCfgPPO,
+                                          WBRDrop15Cfg, WBRDrop15CfgPPO,
+                                          WBRDrop15ViewCfg, WBRDrop15ViewCfgPPO)
 task_registry.register("wbr_terrain", WBRFlatMob, WBRTerrainCfg(), WBRTerrainCfgPPO())
 task_registry.register("wbr_demo", WBRFlatMob, WBRDemoCfg(), WBRDemoCfgPPO())
 task_registry.register("wbr_combo", WBRFlatMob, WBRComboCfg(), WBRComboCfgPPO())
 task_registry.register("wbr_elements", WBRFlatMob, WBRElementsCfg(), WBRElementsCfgPPO())
+task_registry.register("wbr_drop", WBRFlatMob, WBRDropCfg(), WBRDropCfgPPO())
+task_registry.register("wbr_drop15", WBRFlatMob, WBRDrop15Cfg(), WBRDrop15CfgPPO())
+task_registry.register("wbr_drop15view", WBRFlatMob, WBRDrop15ViewCfg(), WBRDrop15ViewCfgPPO())
 
 # ── 四轮：静稳构型行驶 ────────────────────────────────────────────────────────
 from .wbr.flat4.wbr_flat4 import WBRFlat4Mob

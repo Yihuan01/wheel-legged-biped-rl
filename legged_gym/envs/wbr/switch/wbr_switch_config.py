@@ -106,7 +106,7 @@ class WBRSwitchCfg(WBRFlat4Cfg):
             # 残差基线（起立：腿沿走廊伸 + 轮=W3平衡输出 + pitch-PD 辅助；策略学 Δ）
             residual_base = False
             wheel_ff_scale = 0.0      # （保留）额外轮前馈
-            w3_model = ""  # 公仓不携带 W3 基线权重；_init_w3_baseline 会跳过
+            w3_model = "releases/W3_vlim085/model_2200.pt"  # 起立基线用的 2W 平衡网（W3）
             base_kp_pitch = 0.5       # 基线 pitch-PD 辅助增益
             base_kd_pitch = 0.15
             # 反向课程：起点采样 frac ∈ [0, cur_frac]（混合稳定 4W 起点与近 2W 起点）

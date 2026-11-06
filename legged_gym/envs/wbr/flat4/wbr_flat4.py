@@ -169,22 +169,51 @@ class WBRFlat4Mob(LeggedRobot):
         if hi_m <= lo_m:
             return
         ci = [body_names_actor.index("left_knee_caster"), body_names_actor.index("right_knee_caster")]
+        nom = self._dr_nominal_mask()
         for i, handle in enumerate(self.actor_handles):
             bprops = self.gym.get_actor_rigid_body_properties(self.envs[i], handle)
             for b in ci:
-                bprops[b].mass = float(np.random.uniform(lo_m, hi_m))
+                m = float(np.random.uniform(lo_m, hi_m))
+                if nom[i]:
+                    m = COM_M["caster"]              # 名义 env 回 URDF 原值
+                bprops[b].mass = m
             self.gym.set_actor_rigid_body_properties(self.envs[i], handle, bprops, recomputeInertia=True)
 
     def _process_rigid_shape_props(self, props, env_id):
         """【P7】从动轮球低摩擦（资产级、逐 env）：caster link 在 URDF 末尾 ⇒ 其 shape 为最后两个
-        （len-2/len-1）。默认 μ=caster_friction_range[0]（0.10）；enable_dr_sim 时逐 env 随机。
-        四轮静止时从动轮需低侧向摩擦，否则原地转向会与驱动轮互相较劲。"""
+        （len-2/len-1）。默认 μ=caster_friction_range[0]；enable_dr_sim 时逐 env 随机。
+        四轮静止时从动轮需低侧向摩擦，否则原地转向会与驱动轮互相较劲。
+        【P7F4 移植两轮线 P8W7d】驱动轮地摩擦的名义门：先记 env0 的资产原摩擦，super 随机后
+        nominal env 全 shape 回原值；caster 两 shape 随后单独设（名义 env 取区间下沿＝无随机）。"""
+        if env_id == 0 and not hasattr(self, "_dr_fric_nom"):
+            self._dr_fric_nom = float(props[0].friction)   # 资产原值（super 未动前）
         props = super()._process_rigid_shape_props(props, env_id)
         dr = self.cfg.domain_rand
+        if bool(getattr(dr, "randomize_friction", False)):
+            nom = self._dr_nominal_mask()
+            if nom[env_id]:
+                for s in range(len(props)):
+                    props[s].friction = self._dr_fric_nom
         lo, hi = dr.caster_friction_range
-        mu = float(np.random.uniform(lo, hi)) if (getattr(dr, "enable_dr_sim", False) and hi > lo) else float(lo)
+        if bool(getattr(dr, "enable_dr_sim", False)) and hi > lo:
+            mu = float(np.random.uniform(lo, hi))
+            if self._dr_nominal_mask()[env_id]:
+                mu = float(lo)
+        else:
+            mu = float(lo)
         for s in (len(props) - 2, len(props) - 1):
             props[s].friction = mu
+        return props
+
+    def _process_rigid_body_props(self, props, env_id):
+        """【P7F4 移植两轮线 P8W7e】基座质量随机化的名义门：nominal env 不加附加质量
+        （基类用 np.random 对全体 env 加 added_mass_range）。"""
+        m0 = props[0].mass
+        props = super()._process_rigid_body_props(props, env_id)
+        if bool(getattr(self.cfg.domain_rand, "randomize_base_mass", False)):
+            nom = self._dr_nominal_mask()
+            if nom[env_id]:
+                props[0].mass = m0
         return props
 
     # ===================== 四轮模式的域随机化（退化值 = no-op）=====================
@@ -194,18 +223,26 @@ class WBRFlat4Mob(LeggedRobot):
     #           obs_delay_max_steps / action_delay_max_steps
     # 静态类逐 env 建环境时抽一次；push_pitch 在 _push_robots 里随推扰抽；
     # nominal_env_fraction 命中的环境强制回名义值。
+    def _dr_nominal_mask(self):
+        """【P7F4 移植两轮线 P8W7b】名义环境掩码（True = 关闭全部随机化）：惰性建，全部 DR 通道共用一份。
+        nominal_env_fraction >= 1.0 视为不做名义覆盖（掩码全 False ⇒ 与 frac=1.0 旧行为逐位一致）。
+        惰性原因：shape/body props 回调在 _create_envs 逐 env 循环里跑，早于 _init_domain_rand_static
+        （后者在 _init_buffers 尾部才调用），掩码谁先用到谁建。"""
+        if getattr(self, "_dr_nominal", None) is None:
+            frac = float(getattr(self.cfg.domain_rand, "nominal_env_fraction", 1.0))
+            if frac >= 1.0:
+                self._dr_nominal = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+            else:
+                self._dr_nominal = torch.rand(self.num_envs, device=self.device) < frac
+        return self._dr_nominal
+
     def _init_domain_rand_static(self, body_names_actor):
         dr = self.cfg.domain_rand
         n, dev = self.num_envs, self.device
         self._dr_pd_on = float(getattr(dr, "pd_gain_range", [1.0, 1.0])[1]) > float(getattr(dr, "pd_gain_range", [1.0, 1.0])[0])
         self._dr_motor_on = float(getattr(dr, "motor_strength_range", [1.0, 1.0])[1]) > float(getattr(dr, "motor_strength_range", [1.0, 1.0])[0])
-        # 名义环境掩码：True = 关闭全部新增随机化。
-        # nominal_env_fraction == 1.0 视为不做名义覆盖（非退化即生效）；< 1.0 时按比例保留名义环境。
-        frac = float(getattr(dr, "nominal_env_fraction", 1.0))
-        if frac >= 1.0:
-            nom = torch.zeros(n, dtype=torch.bool, device=dev)
-        else:
-            nom = torch.rand(n, device=dev) < frac
+        # 名义环境掩码：True = 关闭全部新增随机化（惰性建，与 shape/body 回调、推扰共用一份）。
+        nom = self._dr_nominal_mask()
         self._dr_nominal = nom
         # 1) 腿部 PD 增益乘子（逐 env, 逐 dof；从动轮被动无驱动、乘子无意义但无害）
         lo, hi = getattr(dr, "pd_gain_range", [1.0, 1.0])
@@ -286,12 +323,23 @@ class WBRFlat4Mob(LeggedRobot):
             self.gym.set_actor_rigid_body_properties(self.envs[i], handle, bprops, recomputeInertia=True)
 
     def _push_robots(self):
-        """【P7F3】在基类水平推扰基础上，可选叠加俯仰角速度脉冲 `push_pitch_vel_max`（退化=0 即基类行为）。"""
-        super()._push_robots()
-        pmax = float(getattr(self.cfg.domain_rand, "push_pitch_vel_max", 0.0))
+        """【P7F3】水平推扰 + 可选俯仰角速度脉冲 `push_pitch_vel_max`（退化=0 不施加）。
+        【P7F4 移植两轮线 P8W7b】nominal_env_fraction 命中的名义 env 不推（稳定梯度源）；
+        名义掩码全 False（frac=1.0）时与原「基类推扰＋全体俯仰脉冲」行为逐位一致。"""
+        dr = self.cfg.domain_rand
+        max_vel = dr.max_push_vel_xy
+        nom = self._dr_nominal_mask()
+        v = torch_rand_float(-max_vel, max_vel, (self.num_envs, 2), device=self.device)
+        if bool(nom.any()):
+            v[nom] = self.root_states[nom, 7:9]      # 名义 env 保持原速度＝不推
+        self.root_states[:, 7:9] = v
+        pmax = float(getattr(dr, "push_pitch_vel_max", 0.0))
         if pmax > 0.0:
-            self.root_states[:, 10] = torch_rand_float(-pmax, pmax, (self.num_envs, 1), device=self.device).squeeze(1)
-            self.gym.set_actor_root_state_tensor(self.sim, gymtorch.unwrap_tensor(self.root_states))
+            ang = torch_rand_float(-pmax, pmax, (self.num_envs, 1), device=self.device).squeeze(1)
+            if bool(nom.any()):
+                ang[nom] = self.root_states[nom, 10]
+            self.root_states[:, 10] = ang
+        self.gym.set_actor_root_state_tensor(self.sim, gymtorch.unwrap_tensor(self.root_states))
 
     def _reward_leg_action_rate(self):
         # 腿部沿用原始 action 空间中的平滑惩罚。（【P7】actions 为 6 维，腿用 act 索引 0~3）
@@ -680,6 +728,20 @@ class WBRFlat4Mob(LeggedRobot):
         # 顶到限位时置 ref_clamped，读数要打标。
         _abs_h_s = self._lerp_by_h(getattr(j, "crouch_abs_by_h", None))
         _abs_h = _abs_h_s if _abs_h_s is not None else float(getattr(j, "crouch_abs_height", 0.0))
+        # 【P8J3d 模板保真·五槽链上】行进回合浅蹲门控（自 wbr_flat.py 移植）：
+        #   |cmd_vx| > moving_crouch_vx_gate 的回合改用更浅的 `crouch_abs_by_h_moving`。
+        #   P8J 交付候选 3d@5650 训练态带此键（uni 继承的 wbr_flat4 跳跃机缺它 ⇒ 链上行进跳
+        #   会退化成站跳锚点）。键缺省 ⇒ 逐字旧行为；站立回合（未过门）不受影响。
+        _abs_h_mov_s = self._lerp_by_h(getattr(j, "crouch_abs_by_h_moving", None))
+        if _abs_h_mov_s is not None:
+            _mov_c = self.commands[:, 0].abs() > float(getattr(
+                j, "moving_crouch_vx_gate", 0.3))
+            if _abs_h_s is not None:
+                _abs_h = torch.where(_mov_c, _abs_h_mov_s, _abs_h_s)
+            else:
+                _abs_h = torch.where(
+                    _mov_c, _abs_h_mov_s,
+                    torch.full_like(_abs_h_mov_s, float(getattr(j, "crouch_abs_height", 0.0))))
         # crouch_sag_ff 是可选静差前馈，默认 0；静差由下方 crouch_z_kp 的机身高度伺服负责。
         # 两者不可同开（同开会让 z_cmd 高于 _abs_h，到位判据永远差一个 ff）。
         _ff = float(getattr(j, "crouch_sag_ff", 0.0) or 0.0)
@@ -2164,6 +2226,14 @@ class WBRFlat4Mob(LeggedRobot):
 
     def step(self, actions):
         """【P7F3】覆写：实现逐 env 动作延迟（action_delay_max_steps>0 时生效；否则逐位等价基类）。"""
+        # 【P7T2 回灌 2026-11-06】RISE 脚本期＝脚本全接管：腿动作置零（PD 目标=脚本姿态）。
+        #   轮已由力矩覆盖接管（_compute_torques 注入点）；腿此前仍叠加 4W 网的动作——
+        #   实测其在脚本姿态上随机出力（τ 冒刺 −23 N·m），起立结果对数值噪声混沌敏感
+        #   （const 与 p7t2 的链上通过率差异即来源于此，2026-11-06 对照 3/3 vs 0/3）。
+        #   `_rise_wheel_torque_override` 非 None ⇔ 脚本活跃（DONE 段持续到 clear）。
+        if getattr(self, "_rise_wheel_torque_override", None) is not None:
+            actions = actions.clone()
+            actions[:, self.leg_dof] = 0.0
         ad = int(getattr(self.cfg.domain_rand, "action_delay_max_steps", 0))
         if ad > 0:
             self._act_delay_buf = torch.roll(self._act_delay_buf, shifts=1, dims=1)

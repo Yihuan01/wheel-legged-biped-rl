@@ -133,6 +133,9 @@ def main():
     ap.add_argument("--land-lower", action="store_true",
                     help="C2-b：落地当拍立刻趴下（不等静置）")
     ap.add_argument("--land-jump", type=float, default=0.10, help="C2 用的跳跃档")
+    ap.add_argument("--moving-jump", action="store_true",
+                    help="【P8 五槽】C4 行进跳：行走中装填跳跃（事件级切跳跃网，落地交还行走网）")
+    ap.add_argument("--mj-walk", type=float, default=0.4, help="行进跳的行走 vx（m/s）")
     ap.add_argument("--cycles", type=int, default=0, help="C1：起立⇄趴下循环次数（0=不做）")
     ap.add_argument("--out", default="", help="结果 JSON 落盘路径")
     args = ap.parse_args()
@@ -175,10 +178,20 @@ def main():
     res["run"] = run_id
     print(f"▶ 已启动 run={run_id}")
     st = d.wait(lambda s: s.get("modeCN") == "四轮" and s.get("hasReadout"), 45, "等四轮就绪", grace=25)
+    # 桥的 telemetry 字段是 {"file": ..., "sizeMB": ..., "rows": ...}，且只给文件名（不带目录）。
+    #   2026-11-05 修：原来读的 "name" 键不存在 ⇒ tsv 恒 None ⇒ 三档站定跳读不到事件列。
+    #   兜底：直接 glob 最新一份 wbr_switch_tel_*.tsv（每次仿真启动新建一份）。
+    import glob as _glob
     tsv = None
     for _ in range(40):
-        tsv = ((d.state().get("telemetry") or {}).get("name")) or None
-        if tsv:
+        _tel = d.state().get("telemetry") or {}
+        _nm = _tel.get("file") or _tel.get("name")
+        if _nm and _nm not in ("—", ""):
+            tsv = _nm if os.path.isabs(_nm) else os.path.join(_data_dir(), os.path.basename(_nm))
+        if not tsv or not os.path.isfile(tsv):
+            _c = _glob.glob(os.path.join(_data_dir(), "wbr_switch_tel_*.tsv"))
+            tsv = max(_c, key=os.path.getmtime) if _c else tsv
+        if tsv and os.path.isfile(tsv) and os.path.getsize(tsv) > 0:
             break
         time.sleep(0.25)
     res["tsv"] = tsv
@@ -257,6 +270,42 @@ def main():
         time.sleep(1.0)
         d.cmd(jump_height=0.0)
 
+    # 4d) 【P8 五槽】C4 行进跳：行走中装填（条件满足直接切跳跃网，事件结束交还行走网）
+    if args.moving_jump:
+        _mj = args.mj_walk or 0.4
+        d.cmd(base_height=0.28)              # 体高设 P8J 带内（否则事件尾从夹取的 0.30 弹回滑块
+        d.cmd(lin_vel_x=_mj)                 #   默认 0.19，110mm 姿态阶跃拖慢恢复——操作员现实行为）
+        time.sleep(2.0)                      # 到达稳态速度
+        d.cmd(jump_height=args.land_jump)
+        d.action("armjump")
+        # 等「进事件窗（phUni≥1）→ 事件结束（phUni==0）」：恢复判定从事件尾起算
+        #   （与 P8J 交付口径一致——从装填起算会把事件时长误算进恢复窗）
+        d.wait(lambda s: (s.get("phUni") or 0) >= 1, 6, "行进跳：进入事件窗")
+        d.wait(lambda s: s.get("phUni") == 0, 6, "行进跳：事件结束")   # phUni=0 是合法值，不能走 or 短路
+        time.sleep(1.0)                      # 交还行走网后重新加速
+        st = d.state()                       # 【修复】事件后状态在此刻取（原版用了③段的过期 st）
+        # 遥测 TSV 用 glob 最新（桥的 telemetry 字段不带 name；wbr_switch_tel_*.tsv 每次
+        #   仿真启动新建一份，行进跳时刻的最新文件必是本 run 的）
+        import glob as _glob
+        _cands = _glob.glob(os.path.join(_data_dir(), "wbr_switch_tel_*.tsv"))
+        _tsv_now = max(_cands, key=os.path.getmtime) if _cands else tsv
+        m = _last_jump_metrics(_tsv_now) if _tsv_now else None
+        cw = _ctrl_window_stats(_tsv_now) if _tsv_now else {}
+        vx1 = (st.get("cmd") or {}).get("vx") or []
+        res["moving_jump"] = {"walk": _mj, "metrics": m, "ctrl": cw,
+                              "mode": st.get("modeCN"), "vx": vx1}
+        print(f"③d 行进跳：ctrl {cw}  metrics {m}  落地后 {st.get('modeCN')}")
+        if st.get("modeCN") != "两轮站立":
+            fails.append(f"行进跳：落地后不在两轮站立（{st.get('modeCN')}）")
+        if not cw.get("covered"):
+            fails.append(f"行进跳：事件窗 ctrl 未翻转（{cw}）")
+        _vx1 = float(vx1[2]) if len(vx1) > 2 else 0.0
+        if _vx1 < 0.5 * _mj:
+            fails.append(f"行进跳：落地后 vx 没跟上（{_vx1}）")
+        d.cmd(lin_vel_x=0.0)
+        time.sleep(1.5)
+        d.cmd(jump_height=0.0)
+
     # 5) 行走 → 减速到停（只在两轮站立时做；C2-b 已趴下就跳过）
     if args.walk and d.state().get("modeCN") == "两轮站立":
         d.cmd(lin_vel_x=args.walk)
@@ -322,9 +371,9 @@ def main():
 
 
 def _data_dir():
-    sys.path.insert(0, HERE)
-    from deps import play02_core as play02   # 只读：取 DATA_DIR 常量
-    return play02.DATA_DIR
+    # 【P8 五槽】不再经 play02_core（它 import isaacgym，链式驱动是纯 stdlib）：
+    #   DATA_DIR = <repo>/legged_gym/scripts/wbr_play_data（与 play02_core.DATA_DIR 同源）
+    return os.path.normpath(os.path.join(HERE, "..", "wbr_play_data"))
 
 
 def _read_tsv(path):
@@ -343,6 +392,20 @@ def _read_tsv(path):
             continue
         rows.append(dict(zip(hdr, cols)))
     return hdr or [], rows
+
+
+def _ctrl_window_stats(path):
+    """【P8 五槽】事件级切换核查：ctrl==1 拍数＋最近一次 ev_takeoff 拍 ctrl 是否=1（窗覆盖）。"""
+    hdr, rows = _read_tsv(path)
+    if not rows or "ctrl" not in (hdr or []):
+        return {"present": False, "covered": False}
+    n1 = sum(1 for r in rows if r.get("ctrl") == "1")
+    takeoff_ok = None
+    for r in rows:
+        if r.get("ev_takeoff") == "1":
+            takeoff_ok = (r.get("ctrl") == "1")
+    return {"present": True, "n1": int(n1), "takeoff_ctrl": takeoff_ok,
+            "covered": bool(n1 > 0 and takeoff_ok)}
 
 
 def _last_jump_metrics(path):

@@ -1,0 +1,78 @@
+<mujoco model="wbr_v2">
+  <compiler angle="radian" meshdir="/home/syh/code/Wheel_legged_gym/resources/robots/wbr/meshes_v1"/>
+
+  <option timestep="0.005" integrator="implicitfast"/>
+
+  <visual>
+    <global offwidth="1280" offheight="720"/>
+    <headlight ambient="0.45 0.45 0.45" diffuse="0.55 0.55 0.55" specular="0.25 0.25 0.25"/>
+  </visual>
+
+  <asset>
+    <mesh name="base_link_visual" content_type="model/stl" file="base_link.STL"/>
+    <mesh name="left_thigh_link_visual" content_type="model/stl" file="left_thigh_link.STL"/>
+    <mesh name="left_shank_link_visual" content_type="model/stl" file="left_shank_link.STL"/>
+    <mesh name="right_thigh_link_visual" content_type="model/stl" file="right_thigh_link.STL"/>
+    <mesh name="right_shank_link_visual" content_type="model/stl" file="right_shank_link.STL"/>
+    <mesh name="left_wheel_link_visual" content_type="model/stl" file="left_wheel_link.STL"/>
+    <mesh name="right_wheel_link_visual" content_type="model/stl" file="right_wheel_link.STL"/>
+  </asset>
+
+  <worldbody>
+    <geom name="floor" size="0 0 0.05" type="plane" solref="0.01" rgba="0.3 0.32 0.36 1"/>
+    <body name="base_link">
+      <inertial pos="4.4472e-05 0.0001156 0.010416" quat="0.66503 0.74505 -0.0511354 -0.00456339" mass="2.5418" diaginertia="0.0157914 0.013713 0.0105776"/>
+      <joint type="free"/>
+      <geom size="0.09 0.08 0.05" type="box" group="3" rgba="0.75294 0.75294 0.75294 1"/>
+      <geom name="base_link_vis" contype="0" conaffinity="0" quat="1 0 0 0" type="mesh" group="2" rgba="0.75294 0.75294 0.75294 1" mesh="base_link_visual"/>
+      <body name="left_thigh_link" pos="0 0.0936 0" quat="0.5 -0.5 0.5 0.5">
+        <inertial pos="0.15659 0.00032005 0.02025" quat="-0.00585222 0.711782 0.00453902 0.702361" mass="0.80815" diaginertia="0.00515361 0.004768 0.000587497"/>
+        <joint name="left_hip_joint" range="-1.5708 1.5708" actuatorfrcrange="-23.7 23.7"/>
+        <geom size="0.1 0.04 0.02" pos="0.1 0 0.02" type="box" group="3" rgba="0.75294 0.75294 0.75294 1"/>
+        <geom name="left_thigh_link_vis" contype="0" conaffinity="0" pos="0 0 0" quat="1 0 0 0" type="mesh" group="2" rgba="0.75294 0.75294 0.75294 1" mesh="left_thigh_link_visual"/>
+        <body name="left_shank_link" pos="0.2 0 0.0403">
+          <inertial pos="0.12156 0.0048719 0.01996" quat="-0.047719 0.706577 0.0522347 0.704091" mass="0.93138" diaginertia="0.00780253 0.00725188 0.000792105"/>
+          <joint name="left_knee_joint" range="-2.7053 -0.1" actuatorfrcrange="-23.7 23.7"/>
+          <geom size="0.143 0.049 0.0285" pos="0.085 0.001 0.0145" type="box" group="3" rgba="0.75294 0.75294 0.75294 1"/>
+          <geom name="left_shank_link_vis" contype="0" conaffinity="0" pos="0 0 0" quat="1 0 0 0" type="mesh" group="2" rgba="0.75294 0.75294 0.75294 1" mesh="left_shank_link_visual"/>
+          <body name="left_wheel_link" pos="0.18 0 0.0403">
+            <inertial pos="0 0 0.025381" quat="0.5 0.5 -0.5 0.5" mass="0.55336" diaginertia="0.0019745 0.0010902 0.0010902"/>
+            <joint name="left_wheel_joint" actuatorfrcrange="-23.7 23.7"/>
+            <geom size="0.08 0.024" pos="0 0 0.027" type="cylinder" group="3" solref="0.01" rgba="0.75294 0.75294 0.75294 1"/>
+            <geom name="left_wheel_link_vis" contype="0" conaffinity="0" quat="1 0 0 0" type="mesh" group="2" rgba="0.75294 0.75294 0.75294 1" mesh="left_wheel_link_visual"/>
+          </body>
+          <body name="left_knee_caster" pos="-0.02939 0.05 0.01983">
+            <inertial pos="0 0 0" mass="0.05" diaginertia="1.682e-05 1.682e-05 1.682e-05"/>
+            <joint name="left_knee_caster_joint" actuatorfrcrange="-1 1" damping="0.01"/>
+            <geom size="0.029" group="3" friction="0.02" solref="0.01" rgba="0.85 0.55 0.2 1"/>
+            <geom name="left_knee_caster_vis" contype="0" conaffinity="0" size="0.029" group="2" rgba="0.85 0.55 0.2 1"/>
+          </body>
+        </body>
+      </body>
+      <body name="right_thigh_link" pos="0 -0.0936 0" quat="0.5 0.5 0.5 -0.5">
+        <inertial pos="0.15659 0.00019029 0.02025" quat="0.00487697 0.711773 -0.00598669 0.702367" mass="0.80815" diaginertia="0.00515371 0.00476808 0.000587476"/>
+        <joint name="right_hip_joint" range="-1.5708 1.5708" actuatorfrcrange="-23.7 23.7"/>
+        <geom size="0.1 0.04 0.02" pos="0.1 0 0.02" type="box" group="3" rgba="0.75294 0.75294 0.75294 1"/>
+        <geom name="right_thigh_link_vis" contype="0" conaffinity="0" pos="0 0 0" quat="1.32679e-06 1 0 0" type="mesh" group="2" rgba="0.75294 0.75294 0.75294 1" mesh="right_thigh_link_visual"/>
+        <body name="right_shank_link" pos="0.2 0 0.0403">
+          <inertial pos="0.12114 0.0051863 0.020146" quat="0.0516927 0.707463 -0.046558 0.703318" mass="0.92691" diaginertia="0.00776093 0.00721087 0.00078512"/>
+          <joint name="right_knee_joint" range="0.1 2.7053" actuatorfrcrange="-23.7 23.7"/>
+          <geom size="0.143 0.049 0.0285" pos="0.085 0.001 0.0145" quat="1.32679e-06 1 0 0" type="box" group="3" rgba="0.75294 0.75294 0.75294 1"/>
+          <geom name="right_shank_link_vis" contype="0" conaffinity="0" pos="0 0 0" quat="1.32679e-06 1 0 0" type="mesh" group="2" rgba="0.75294 0.75294 0.75294 1" mesh="right_shank_link_visual"/>
+          <body name="right_wheel_link" pos="0.18 0 0.0403">
+            <inertial pos="0 0 0.025381" quat="0.500001 0.499999 -0.499999 0.500001" mass="0.55336" diaginertia="0.0019745 0.0010902 0.0010902"/>
+            <joint name="right_wheel_joint" actuatorfrcrange="-23.7 23.7"/>
+            <geom size="0.08 0.024" pos="0 0 0.027" type="cylinder" group="3" solref="0.01" rgba="0.75294 0.75294 0.75294 1"/>
+            <geom name="right_wheel_link_vis" contype="0" conaffinity="0" pos="0 0 0" quat="1.32679e-06 1 0 0" type="mesh" group="2" rgba="0.75294 0.75294 0.75294 1" mesh="right_wheel_link_visual"/>
+          </body>
+          <body name="right_knee_caster" pos="-0.02939 -0.05 0.01983">
+            <inertial pos="0 0 0" mass="0.05" diaginertia="1.682e-05 1.682e-05 1.682e-05"/>
+            <joint name="right_knee_caster_joint" actuatorfrcrange="-1 1" damping="0.01"/>
+            <geom size="0.029" group="3" friction="0.02" solref="0.01" rgba="0.85 0.55 0.2 1"/>
+            <geom name="right_knee_caster_vis" contype="0" conaffinity="0" size="0.029" group="2" rgba="0.85 0.55 0.2 1"/>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+</mujoco>

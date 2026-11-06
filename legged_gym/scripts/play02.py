@@ -623,8 +623,10 @@ def run_single(args):
         f"wheel_idx={','.join(str(i) for i in sorted(wheel_set))}",
         f"torque_limits={','.join(f'{v:.4f}' for v in torque_limits)}",
         f"dt={dt:.6f}",
-        "model_dir=" + str(getattr(ppo_runner, "model_file_path", "?")),
-        "model_iter=" + str(getattr(ppo_runner, "load_num_steps", "?")),
+        # 【P7F4】model_file_path/load_num_steps 属性在 rsl_rl 1.0.2 不存在（恒写 "?"），
+        #   绘图页因此解析不出模型——改用真实来源：load_run 目录 + runner 已加载的迭代号。
+        "model_dir=" + str(args.load_run if (getattr(args, "load_run", None) and os.path.isdir(str(args.load_run))) else "?"),
+        "model_iter=" + str(getattr(ppo_runner, "current_learning_iteration", None) or getattr(args, "checkpoint", "?")),
         "model_cli=" + "%s|%s" % (getattr(args, "load_run", "?"), getattr(args, "checkpoint", "?")),
         "cmd_cols=" + ",".join(short for _, short in cmd_cols),
         "ranges=" + ";".join(f"{short}:{span_of(BY_SHORT[short], getattr(env.cfg.commands.ranges, attr))[0]:.4f},"
@@ -705,7 +707,7 @@ def run_single(args):
 
             if step_counter == 1 and env.viewer is not None:
                 robot_pos = env.root_states[ROBOT, 0:3].cpu().numpy()
-                env.set_camera(robot_pos + np.array([-1.5, 1.0, 0.8]), robot_pos + np.array([0.5, 0.0, 0.0]))
+                env.set_camera(robot_pos + np.array([-1.5, 1.0, 1.34]), robot_pos + np.array([0.6, 0.0, 0.0]))
 
             step_counter += 1
             current_time += dt
@@ -827,8 +829,8 @@ def _build_switch(args):
     env.playback_hold = True
     dev = env.device
     p_4w = load_actor_critic(args.fourw_checkpoint, 164, dev)
-    p_stand = load_actor_critic(args.standup_checkpoint, 173, dev) if getattr(args, "standup_checkpoint", "") else None
-    p_w3 = load_actor_critic(args.w3_checkpoint, 161, dev) if getattr(args, "w3_checkpoint", "") else None
+    p_stand = load_actor_critic(args.standup_checkpoint, 173, dev)
+    p_w3 = load_actor_critic(args.w3_checkpoint, 161, dev)   # 两轮站立/行走平衡网（交接目标）
     p_lie = load_actor_critic(args.lie_checkpoint, 173, dev)  # 趴下（2W→4W）专用策略
     return env, p_4w, p_stand, p_w3, p_lie
 
@@ -944,8 +946,20 @@ def run_switch(args):
     print("=" * 78 + "\n")
 
     gui_cmds['base_height'] = 0.19   # switch 档初始体高取四轮工作高（面板滑块同显 0.19），四轮起始水平
+    # vx/yaw 滑条量程跟随所加载四轮模型（ckpt 同目录 config.json 的训练量程，提速线 ±1.5 / 未来 ±2.0 自动跟上；
+    # 读不到回退 ±1.0），并与两轮侧 ±1.0 取并集——否则 P7F4+ 模型在面板/控制台滑不出新量程。
+    _vx4 = _yw4 = (-1.0, 1.0)
+    try:
+        import json as _json
+        with open(os.path.join(os.path.dirname(os.path.abspath(args.fourw_checkpoint)), 'config.json')) as _f:
+            _r = _json.load(_f)['commands']['ranges']
+        _vx4 = (float(_r['lin_vel_x'][0]), float(_r['lin_vel_x'][1]))
+        _yw4 = (float(_r['ang_vel_yaw'][0]), float(_r['ang_vel_yaw'][1]))
+    except Exception:
+        pass
     start_gui_thread(env, ranges={
-        'lin_vel_x': (-1.0, 1.0), 'ang_vel_yaw': (-1.0, 1.0),
+        'lin_vel_x': (min(-1.0, _vx4[0]), max(1.0, _vx4[1])),
+        'ang_vel_yaw': (min(-1.0, _yw4[0]), max(1.0, _yw4[1])),
         'base_height': (0.175, 0.245), 'ang_roll': (-0.2, 0.2),
         'jump_height': (0.0, 0.15),
     }, switch=True)
@@ -1109,7 +1123,7 @@ def run_switch(args):
 
             if step_counter == 1 and env.viewer is not None:
                 robot_pos = env.root_states[ROBOT, 0:3].cpu().numpy()
-                env.set_camera(robot_pos + np.array([-1.5, 1.0, 0.8]), robot_pos + np.array([0.5, 0.0, 0.0]))
+                env.set_camera(robot_pos + np.array([-1.5, 1.0, 1.34]), robot_pos + np.array([0.6, 0.0, 0.0]))
 
             step_counter += 1
             current_time += dt

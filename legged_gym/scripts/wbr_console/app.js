@@ -95,11 +95,12 @@
   /* --------------------------------------------------------------- 全局状态 */
   var S = {
     mode: 'uni',
+    engine: store.get('engine', 'isaac'),   // 【Sim2Sim P2】启动引擎选择；缺省 isaac（向后兼容）
     tab: (function () { try { var t = new URLSearchParams(location.search).get('tab'); if (t) return t; } catch (e) { } return store.get('tab', 'run'); })(),
     navpos: store.get('navpos', 'left'),
     theme: store.get('theme', 'system'),
     slots: null,          // {fourw:{path,obs,act,model,ckpt}, ...}
-    single: { task: 'wbr_flat', run: '', checkpoint: null, from_run_config: '', path: '' },
+    single: { task: 'wbr_flat', run: '', checkpoint: null, from_run_config: '', path: '', robots: 3 },
     params: {},  // 衔接参数（键值见 PARAM_DEFS/PARAM_DEFAULTS，缺省时用默认值）
     scenarios: [],
     saved: [],
@@ -115,7 +116,50 @@
     telLogs: []
   };
 
-  var TABS = [{ key: 'run', cn: '仿真运行' }, { key: 'model', cn: '模型配置' }, { key: 'plot', cn: '数据绘图' }, { key: 'use', cn: '使用说明' }];
+  var TABS = [{ key: 'run', cn: '仿真运行' }, { key: 'model', cn: '模型配置' }, { key: 'mujoco', cn: 'MuJoCo 配置' }, { key: 'plot', cn: '数据绘图' }, { key: 'use', cn: '使用说明' }];
+  // 【Sim2Sim P2】MuJoCo 场景预设（设计稿 §6）；h 量程按契约 [0.175, 0.245]
+  var MJ_PRESETS = {
+    stand: { vx: 0, yaw: 0, h: 0.19, label: '站定 0.19' }, walk03: { vx: 0.3, yaw: 0, h: 0.21, label: '走 0.3' },
+    walk06: { vx: 0.6, yaw: 0, h: 0.21, label: '走 0.6' }, h0175: { vx: 0, yaw: 0, h: 0.175, label: '高度 0.175' },
+    h023: { vx: 0, yaw: 0, h: 0.23, label: '高度 0.23' }, h0245: { vx: 0, yaw: 0, h: 0.245, label: '高度 0.245' },
+    yaw05: { vx: 0.3, yaw: 0.5, h: 0.21, label: '转向 0.5' }
+  };
+  // 【任务③ 两轮】两轮场景预设（对齐 parity_two 场景：stand/walk03/walk06/yaw05/h020/h035）
+  var MJ_PRESETS_TWO = {
+    stand: { vx: 0, yaw: 0, h: 0.25, label: '站定 0.25' }, walk03: { vx: 0.3, yaw: 0, h: 0.25, label: '走 0.3' },
+    walk06: { vx: 0.6, yaw: 0, h: 0.25, label: '走 0.6' }, yaw05: { vx: 0.3, yaw: 0.5, h: 0.25, label: '转向 0.5' },
+    h020: { vx: 0, yaw: 0, h: 0.20, label: '高度 0.20' }, h035: { vx: 0, yaw: 0, h: 0.35, label: '高度 0.35' }
+  };
+  // 【S3 槽位化】每个槽＝一套契约＋资产＋权重；uni/uni4 为五槽链（wbr_uni 同序）
+  var MJ_SLOTS = {
+    four: { cn: '四轮 164', contract: 'legged_gym/scripts/sim2sim_mujoco/assets/deploy_contract.json',
+            mjcf: 'legged_gym/scripts/sim2sim_mujoco/assets/mjcf/wbr_v2.xml', obs: 164, defH: 0.19,
+            presets: 'four', roll: false, jump: false, release: 'P7F3e_yaw1_dr15' },
+    two: { cn: '两轮 161', contract: 'legged_gym/scripts/sim2sim_mujoco/assets/deploy_contract_two.json',
+           mjcf: 'legged_gym/scripts/sim2sim_mujoco/assets/mjcf/wbr_v1.xml', obs: 161, defH: 0.25,
+           presets: 'two', roll: true, jump: false, release: 'P8W7_push01_fric05' },
+    jump: { cn: '两轮跳跃 161', contract: 'legged_gym/scripts/sim2sim_mujoco/assets/deploy_contract_two.json',
+            mjcf: 'legged_gym/scripts/sim2sim_mujoco/assets/mjcf/wbr_v1.xml', obs: 161, defH: 0.25,
+            presets: 'two', roll: true, jump: true, release: 'P8J3d_wheelfollow_lite' },
+    lie: { cn: '趴下 173', contract: 'legged_gym/scripts/sim2sim_mujoco/assets/deploy_contract_lie.json',
+           mjcf: 'legged_gym/scripts/sim2sim_mujoco/assets/mjcf/wbr_v2.xml', obs: 173, defH: 0.19,
+           presets: 'four', roll: false, jump: false, release: 'P7L_liedown' },
+    uni: { cn: '五槽链（两轮起步）', chain: true, start: '2w', obs: 0, defH: 0.25, presets: 'two' },
+    uni4: { cn: '五槽链（四轮起步）', chain: true, start: '4w', obs: 0, defH: 0.19, presets: 'four' }
+  };
+  function mjSlotKey() { return MJ_SLOTS[S.mj.slot] ? S.mj.slot : 'four'; }
+  function mjSlot() { return MJ_SLOTS[mjSlotKey()]; }
+  function mjPresets() { return mjSlot().presets === 'two' ? MJ_PRESETS_TWO : MJ_PRESETS; }
+  function mjChain() { return !!mjSlot().chain; }
+  var MJ_CFG_KEY = 'wbr.mj.cfg';
+  function mjLoadCfg() {
+    var cfg = {};
+    try { cfg = JSON.parse(localStorage.getItem(MJ_CFG_KEY) || '{}') || {}; } catch (e) { cfg = {}; }
+    // 旧配置没有 terrain 字段 ⇒ 默认按「复杂地形」（作者 2026-11-06 口径：五槽应接复杂地形）
+    if (cfg.terrain === undefined) cfg.terrain = true;
+    return cfg;
+  }
+  S.mj = Object.assign({ slot: 'four', terrain: true, release: '', model: '', customPt: '', mjcf: '', preset: 'walk03', vx: 0, yaw: 0, h: 0.21, roll: 0, dur: 0, record: true, window: true, speed: 1 }, mjLoadCfg());
   var CHANNELS = [
     { key: 'lin_vel_x', label: 'Vx', unit: 'm/s', min: -1, max: 1, step: .05, def: 0, d: 2, short: 'vx' },
     { key: 'ang_vel_yaw', label: 'Yaw', unit: 'rad/s', min: -1, max: 1, step: .05, def: 0, d: 2, short: 'yaw' },
@@ -123,20 +167,27 @@
     { key: 'ang_roll', label: 'Roll', unit: 'rad', min: -.2, max: .2, step: .02, def: 0, d: 2, short: 'roll' },
     { key: 'jump_height', label: 'Jump', unit: 'm', min: 0, max: .15, step: .01, def: 0, d: 2, short: 'jump', switchOff: true }
   ];
-  var SLOT_ORDER = ['fourw', 'standup', 'w3', 'lie'];
-  var SLOT_STAGE = { fourw: '① 四轮行驶', standup: '② 起立', w3: '③ 两轮站立/行走', lie: '④ 趴下' };
-  var SLOT_OBS = { fourw: 164, standup: 173, w3: 161, lie: 173 };
+  var SLOT_ORDER = ['fourw', 'standup', 'w3', 'lie', 'jump'];
+  var SLOT_STAGE = { fourw: '① 四轮行驶', standup: '② 起立', w3: '③ 两轮站立/行走', lie: '④ 趴下', jump: '⑤ 跳跃' };
+  var SLOT_OBS = { fourw: 164, standup: 173, w3: 161, lie: 173, jump: 161 };
   // 起立槽可为「相位脚本」（P7T，无权重）：场景里写作 {"type":"script"}，预检与运行端都认（4/4 照旧）。
   var SCRIPT_SLOT_LABEL = '相位脚本（P7T，无需权重）';
   function isScriptSlot(v) { return !!v && typeof v === 'object' && String(v.type || '').toLowerCase() === 'script'; }
   function scriptSlotObj() { return { path: null, script: true, model: SCRIPT_SLOT_LABEL, ckpt: '—', obs: null, act: null }; }
   // wbr_terrain 与 wbr_flat 观测同为 161（无高程观测）⇒ INV 只保留一一对应的维度，
   // 161 的反查走 taskForObs（带路径判断）。
-  var TASK_OBS = { wbr_flat: 161, wbr_flat4: 164, wbr_switch: 173, wbr_terrain: 161,
+  var TASK_OBS = { wbr_flat: 161, wbr_jump: 161, wbr_flat4: 164, wbr_switch: 173, wbr_terrain: 161,
                    wbr_demo: 161, wbr_combo: 161, wbr_elements: 161 };
   var TASK_OBS_INV = { 161: 'wbr_flat', 164: 'wbr_flat4', 173: 'wbr_switch' };
   // 四槽式模式（switch / uni）共用同一套四槽 checkpoint 与主循环；single 为单策略。
-  function isSlotMode(m) { m = m || S.mode; return m === 'uni'; }
+  function isSlotMode(m) {
+    // 【MuJoCo】链模式的通道可用性由后端 cmdRanges 表达（四轮 jump 量程退化 ⇒ 自动置灰），
+    //   不能沿用 Isaac 的「仅 TWOW 可跳」门控——那要求 st.modeKey，而 MuJoCo 桥不返回它，
+    //   结果 jump 滑条永远置灰（作者 2026-11-06 反馈）。
+    //   用桥上报的**实际引擎**（S.engine 只是用户选择，从配置页一键启动时仍是 isaac）
+    if ((S.state && S.state.engine === 'mujoco') || S.engine === 'mujoco') return false;
+    m = m || S.mode; return m === 'uni';
+  }
   var MODE_LABEL = { uni: '双模式', single: '单策略' };
   // 衔接参数：standup_mode 选起立方式（p7s 模型 / trad 传统脚本链）；两套起立参数互斥（非当前方式置灰）。
   //   leg_p_gains 是 P7S 起立伸腿/交接期的腿 P 增益倍率（wbr_bench_run 包装 playback_set_mode 实现）。
@@ -234,8 +285,11 @@
       el('span', { class: 'rb-text' }, ['WBR Console', el('small', { id: 'railBrandSub', text: 'WBR 控制台' })])
     ]));
     TABS.forEach(function (t) {
-      navTop.appendChild(el('button', { 'data-tab': t.key, 'aria-pressed': String(S.tab === t.key), text: t.cn }));
-      rail.appendChild(el('button', { 'data-tab': t.key, 'aria-pressed': String(S.tab === t.key), text: t.cn }));
+      // 【P4 已接】MuJoCo 遥测经 serve.MjTelWriter 落 wbr_tel_mj_*.tsv（plot02 口径），
+      //   绘图页与 Isaac 日志同列：指令三线/高度/相位底色可画，Isaac 关节面板缺列自动留空。
+      var lock = {};
+      navTop.appendChild(el('button', Object.assign({ 'data-tab': t.key, 'aria-pressed': String(S.tab === t.key), text: t.cn }, lock)));
+      rail.appendChild(el('button', Object.assign({ 'data-tab': t.key, 'aria-pressed': String(S.tab === t.key), text: t.cn }, lock)));
     });
     $$('[data-tab]').forEach(function (b) {
       b.addEventListener('click', function () { switchTab(b.getAttribute('data-tab')); });
@@ -249,10 +303,22 @@
     S.tab = key; store.set('tab', key);
     $$('[data-tab]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-tab') === key)); });
     $$('.page').forEach(function (p) { p.classList.toggle('on', p.getAttribute('data-page') === key); });
+    if (key === 'mujoco') { cfxRestore(); cfxFillModels(); cfxFillManifest(); }
     if (key === 'plot') ensurePlot();
     // 原生窗口：离开运行页降下，回到运行页重新贴合
     if (key === 'run') {
-      if (S.sim && S.sim.status === 'running') dockWhenReady(false);
+      // 【P8 五槽】默认对齐：仿真 run 更换（重启/新启）→ 重置停靠状态并自动重停靠。
+      //   旧态 DOCK.on 跨仿真重启残留会让 dockWhenReady 跳过 ⇒ 新窗口停在默认位置错位。
+      if (S.sim && S.sim.status === 'running') {
+        var _run = S.sim.run || S.sim.id || null;
+        if (_run && _run !== lastDockRun) {
+          lastDockRun = _run;
+          DOCK.on = false; DOCK.cal = null; DOCK.calTries = 0;
+          dockWhenReady(false);
+        } else {
+          dockWhenReady(false);
+        }
+      }
     } else if (was === 'run') {
       undockWindow(true);
     }
@@ -289,6 +355,44 @@
   /* --------------------------------------------------------------- 通道区 */
   var chanEls = {};
 
+  // 【P7F4】Q/E 临时偏航：按住临时覆盖 yaw ±0.5，松开恢复 a/d 设定的基值。
+  //   held 位掩码（1=Q, 2=E）支持双键（后按优先）；临时期间 a/d/滑条改的值记为新基值；
+  //   yaw 通道禁用（量程退化/离线）时不动作；空格重置会清掉临时态。
+  var yawTemp = { base: null, held: 0, dir: 0 };
+
+  function yawSetUI(v) {
+    var e = chanEls.ang_vel_yaw; if (!e) return null;
+    var spec = CHANNELS.find(function (c) { return c.key === 'ang_vel_yaw'; }); if (!spec) return null;
+    v = Math.min(spec.max, Math.max(spec.min, v));
+    e.inp.value = v; e.vTxt.textContent = fmt(v, spec.d);
+    e.tri.children[0].textContent = 'in ' + fmt(v, spec.d);
+    return v;
+  }
+  function yawTempStart(dir, mask) {
+    var e = chanEls.ang_vel_yaw; if (!e || e.inp.disabled) return;
+    if (yawTemp.held & mask) return;
+    yawTemp.held |= mask;
+    if (yawTemp.base === null) yawTemp.base = parseFloat(e.inp.value) || 0;
+    yawTemp.dir = dir;
+    var v = yawSetUI(0.5 * dir);
+    if (v === null) return;
+    if (!OFFLINE) POST('/api/cmd', { key: 'ang_vel_yaw', value: v }).catch(function () { });
+  }
+  function yawTempEnd(mask) {
+    if (!(yawTemp.held & mask)) return;
+    yawTemp.held &= ~mask;
+    if (yawTemp.held) {                    // 另一键仍按住 ⇒ 切到另一方向
+      yawTemp.dir = (yawTemp.held & 2) ? 1 : -1;
+      var v2 = yawSetUI(0.5 * yawTemp.dir);
+      if (v2 !== null && !OFFLINE) POST('/api/cmd', { key: 'ang_vel_yaw', value: v2 }).catch(function () { });
+      return;
+    }
+    if (yawTemp.base === null) return;
+    var v = yawSetUI(yawTemp.base);
+    yawTemp.base = null;
+    if (v !== null && !OFFLINE) POST('/api/cmd', { key: 'ang_vel_yaw', value: v }).catch(function () { });
+  }
+
   function renderChannels() {
     var box = document.getElementById('chans');
     box.innerHTML = ''; chanEls = {};
@@ -316,6 +420,7 @@
         var v = parseFloat(inp.value);
         vTxt.textContent = fmt(v, c.d);
         tri.children[0].textContent = 'in ' + fmt(v, c.d);
+        if (c.key === 'ang_vel_yaw' && yawTemp.base !== null) yawTemp.base = v;   // 临时偏航期间改滑条 ⇒ 记为新基值
         if (OFFLINE) { tri.children[1].textContent = 'tgt ' + fmt(v * .96, c.d); tri.children[2].textContent = 'act ' + fmt(v * .93, c.d); return; }
         clearTimeout(sendT);
         sendT = setTimeout(function () { POST('/api/cmd', { key: c.key, value: v }).catch(function (e) { toast('下发失败：' + e.message, 'bad'); }); }, 70);
@@ -343,8 +448,60 @@
     });
   }
 
+  var lastModeKey = null;
+  // 【P8 五槽】点击校准的变换持久化：刷新后无需重新点两下（浏览器挪屏/改缩放后再点即更新）
+  try {
+    var _savedXf = store.get('vp_xform_v2');          // v2：11-04 污染数据弃用换 key
+    if (_savedXf && _savedXf.s > 0.2 && _savedXf.s < 4) {
+      DOCK.xform = { ok: true, s: _savedXf.s, ox: _savedXf.ox, oy: _savedXf.oy };
+    }
+  } catch (_) { }
+  // 【P8 五槽·点击校准】页面里每次点击：把页面坐标发给后端，后端配对鼠标指针的
+  //   真实设备坐标（xwin.pointer），两组即可解出 CSS→设备变换（停靠目标合成的基准）。
+  var xformApplied = false;
+  document.addEventListener('click', function (e) {
+    if (OFFLINE || !e.detail) return;   // e.detail=0＝键盘触发（指针不在点击处）⇒ 不采集，防污染
+    try {
+      POST('/api/point', { cx: e.clientX, cy: e.clientY }).then(function (j) {
+        // 【P8 五槽】点击校准：后端用指针真值解出 CSS→设备变换 ⇒ 喂 DOCK.xform
+        //   （与「校准对齐」按钮同一结构，dockWindow ① 路径直接用）——点击即自动校准。
+        if (j && j.ok && j.xform) {
+          // 每次点击都刷新变换（浏览器挪屏/改缩放后自动跟上）并重贴（精化即重对齐）
+          DOCK.xform = { ok: true, s: j.xform.s, ox: j.xform.ox, oy: j.xform.oy };
+          DOCK.cal = { x: 0, y: 0 }; DOCK.calTries = 0;
+          try { store.set('vp_xform_v2', { s: DOCK.xform.s, ox: DOCK.xform.ox, oy: DOCK.xform.oy }); } catch (_) { }
+          if (S.sim && S.sim.status === 'running') { DOCK.on = false; dockWhenReady(false); }
+          if (!xformApplied) {
+            xformApplied = true;
+            toast('视口校准完成（点击采集 s=' + j.xform.s.toFixed(2) + '），已自动对齐', 'ok');
+          }
+        }
+      }).catch(function () { });
+    } catch (_) { }
+  }, true);
+  var lastDockRun = null;
   function updateReadouts(st) {
     if (!st || !st.cmd) return;
+    // 【P8 五槽】模式切换 → 高度滑块跟随：量程已随 cmdRanges 动态（后端 _apply_mode 按模式
+    //   切 [0.175,0.245]/[0.2,0.35]/事件窗 [0.24,0.30]），这里补"设定值"回中——后端
+    //   _snap_cmds_for 在模式切换时已把目标回中（四轮 0.19 / 两轮 0.28），滑块同步之。
+    // 【MuJoCo】没有 modeKey，用链槽位当键；首次拿到 state（_had=false）也同步一次，
+    //   否则滑条显示的是 localStorage 旧值（与后端实际指令 0.19/0.25 不一致）。
+    var _mk = st.chain ? ('chain:' + (st.slot || '')) : (st.modeKey || '');
+    if (_mk !== lastModeKey) {
+      var _had = lastModeKey !== null;
+      lastModeKey = _mk;
+      var _h = chanEls['base_height'];
+      // 用 **tgt**（后端实际指令，cmd.h[1]）而不是 in（cmd.h[0] 是前端上次下发值，启动时为 0）
+      if (_h && st.cmd.h && st.cmd.h.length > 1) {
+        var _vin = parseFloat(st.cmd.h[1]);
+        if (!isNaN(_vin) && _vin > 0) {
+          _h.inp.value = _vin.toFixed(3);
+          _h.vTxt.textContent = _vin.toFixed(3);   // 程序化赋值不触发 input 事件
+          gui_cmds['base_height'] = _vin;
+        }
+      }
+    }
     // 相机跟随按钮：显示当前开/关（后端 _STATE.camera，默认关闭）
     var camBtn = document.getElementById('vpCamera');
     if (camBtn) {
@@ -396,6 +553,7 @@
     if (st && st.hasReadout) {
       items.push(['mode', st.modeCN || '—']);
       items.push(['ph', String(st.phUni != null ? st.phUni : st.ph)]);
+      if (st.ctrl != null) items.push(['ctrl', st.ctrl === 1 ? '跳跃网(P8J)' : '行走网(P8W7)']);
       items.push(['ev_up', st.evUp ? '●' : '○']);
     }
     if (st && st.telemetry) {
@@ -404,8 +562,91 @@
     }
     items.push(['GPU', (g.used != null ? g.used + '/' + g.total + 'G' : '—')]);
     items.push(['仿真', S.sim.status === 'running' ? ('pid ' + S.sim.pid) : '未启动']);
-    box.innerHTML = '';
-    items.forEach(function (it) { box.appendChild(el('span', { html: it[0] + ' <b>' + it[1] + '</b>' })); });
+    items.push(['视口校准', (DOCK.xform && DOCK.xform.ok)
+      ? ('已完成（s=' + DOCK.xform.s.toFixed(2) + '）')
+      : '未完成——在页面上任意点击两处不同按钮即可']);
+    // 状态条同样避免无谓重排（遥测行数每拍变，但布局不该跟着抖）
+    var sig = items.map(function (it) { return it[0] + '=' + it[1]; }).join('|');
+    if (box._sig !== sig) {
+      box.innerHTML = items.map(function (it) { return '<span>' + it[0] + ' <b>' + it[1] + '</b></span>'; }).join('');
+      box._sig = sig;
+    }
+    // 【S3 / A+B】MuJoCo 五槽链：指令回执条 + 动作按钮按槽位解禁
+    var bar = document.getElementById('mjChainBar');
+    // 用桥上报的**实际引擎**（不是用户选择 S.engine）：从配置页一键启动链时用户没点引擎分段，
+    // S.engine 仍是 isaac，若用它会让 chainOn=false、按钮不解禁、时序条不显示。
+    var mjNow = (st && st.engine === 'mujoco') || displayEngine() === 'mujoco';
+    var chainOn = (mjNow && st && st.chain);
+    var allowed = (chainOn && st.allowed) || [];
+    var isChainSlot = function (a) { return chainOn && allowed.indexOf(a) >= 0; };
+
+    // 动作按钮：链模式按守卫表解禁；单槽模式保留「装填跳」原逻辑，其余置灰
+    var btnMap = [
+      ['#btnRise', 'rise', 'MuJoCo 单策略不支持起立（链模式四轮槽可点）'],
+      ['#btnLower', 'lower', 'MuJoCo 单策略不支持趴下（链模式两轮槽可点）'],
+      ['[data-act="armjump"]', 'armjump', '当前槽位无跳跃通道'],
+      ['#btnMjFour', 'four', '当前槽位不能回四轮'],
+      ['#tglAuto', 'auto', '单策略不支持连跳']
+    ];
+    btnMap.forEach(function (b) {
+      var n = document.querySelector(b[0]); if (!n) return;
+      var can = chainOn
+        ? (b[1] === 'armjump' ? (st.canJump || isChainSlot('jump')) : isChainSlot(b[1]))
+        : (b[1] === 'armjump' && mjNow && st && st.canJump);
+      if (can) {
+        n.removeAttribute('data-mj-locked');
+        n.removeAttribute('data-mj-why');
+        if (n.tagName === 'BUTTON' || n.tagName === 'INPUT') n.disabled = false;
+      } else {
+        n.setAttribute('data-mj-locked', '');
+        n.setAttribute('data-mj-why', b[2]);
+      }
+    });
+    // 槽位直达按钮：链模式显示，且按守卫表解禁（不在 allowed 里就置灰）
+    ['#btnMjTwo', '#btnMjFour'].forEach(function (id) {
+      var n = document.querySelector(id); if (!n) return;
+      n.hidden = !chainOn;
+      if (!chainOn) return;
+      var req = id === '#btnMjTwo' ? 'two' : 'four';
+      if (allowed.indexOf(req) >= 0) { n.removeAttribute('data-mj-locked'); n.removeAttribute('data-mj-why'); }
+      else { n.setAttribute('data-mj-locked', ''); n.setAttribute('data-mj-why', '当前槽位不能' + (req === 'two' ? '回两轮' : '回四轮')); }
+    });
+
+    if (bar) {
+      if (chainOn) {
+        var evs = (st.marks || []).slice(-6).map(function (e) {
+          if (!e || typeof e !== 'object') return '';
+          if (Array.isArray(e)) {                       // 旧格式 [name, t, z]
+            return '▶ ' + e[0] + ' @' + e[1] + 's z=' + e[2];
+          }
+          if (e.event === 'request') {
+            return (e.accepted ? '✅' : '⛔') + ' 指令「' + (e.label || e.req) + '」' +
+                   (e.reason ? '：' + e.reason : '');
+          }
+          if (e.event === 'applied') {
+            return '▶ 执行「' + (e.label || e.req) + '」→ ' + (e.slot || '?');
+          }
+          if (e.event === 'terminated') {
+            return '⛔ 终止：' + (e.why || '?');
+          }
+          return '▶ ' + (e.slot || '?') + ' @' + (e.t != null ? e.t : '?') +
+                 's z=' + (e.z != null ? e.z : '?');
+        }).filter(Boolean).join('<br>');
+        var lr = st.lastRequest;
+        var html = '链槽位 <b>' + (st.slot || '—') + '</b> · 相位 <b>' + st.phase + '</b> · ' +
+          '可下指令 <b>' + (allowed.join(' / ') || '—') + '</b> · ' +
+          '指令 <b>' + (st.nRequests || 0) + '</b> 条（拒绝 ' + (st.nRejected || 0) + '） · ' +
+          (st.terminated ? '<b style="color:#c33">终止：' + st.terminated + '</b>' : '运行中，等指令') +
+          (lr ? '<br><span class="muted">上一条：' + (lr.accepted ? '✅' : '⛔') + ' ' +
+                (lr.label || lr.req) + ' — ' + (lr.reason || '') + '</span>' : '') +
+          '<br><span class="muted">' + evs + '</span>';
+        // 内容没变就不写 DOM（每 600ms 轮询时避免无谓重排 → 不触发 ResizeObserver/重贴窗口）
+        if (bar._sig !== html) { bar.innerHTML = html; bar._sig = html; }
+        bar.hidden = false;
+      } else {
+        if (!bar.hidden) { bar.hidden = true; bar.innerHTML = ''; bar._sig = null; }
+      }
+    }
   }
 
   function renderSimState() {
@@ -420,8 +661,18 @@
     document.getElementById('btnStart').disabled = S.sim.status === 'running';
     document.getElementById('btnStart2').disabled = S.sim.status === 'running';
     document.getElementById('btnStop').disabled = S.sim.status !== 'running';
+    applyEngineUI();                       // 【Sim2Sim P2】徽标/分段锁定随运行态刷新
     if (S.sim.status === 'running') {
-      if (S.tab === 'run') dockWhenReady(false);
+      if (S.tab === 'run') {
+      // 【P8 五槽】仿真 run 更换（重启/新启）→ 重置停靠状态并重停靠
+      //   （旧 DOCK.on 残留会让 dockWhenReady 跳过 ⇒ 新窗口停在默认位置错位）
+      var _run = S.sim && S.sim.run;
+      if (_run && _run !== lastDockRun) {
+        lastDockRun = _run;
+        DOCK.on = false; DOCK.cal = null; DOCK.calTries = 0;
+      }
+      dockWhenReady(false);
+    }
     } else {
       DOCK.on = false;
       clearInterval(DOCK.timer);
@@ -608,14 +859,16 @@
       single: {
         task: sp.task, load_run: sp.run || null, checkpoint: sp.checkpoint,
         from_run_config: _terrainTask ? null : (sp.from_run_config || null),
-        ckpt_path: sp.path || null
+        ckpt_path: sp.path || null,
+        robots: Math.max(1, Math.min(3, parseInt(sp.robots, 10) || 3))
       },
       params: params
     };
   }
 
   function runPreflight(silent) {
-    POST('/api/preflight', { spec: buildSpec() }).then(function (j) {
+    var spec = (S.engine === 'mujoco') ? buildMujocoSpec() : buildSpec();
+    POST('/api/preflight', { spec: spec }).then(function (j) {
       renderPreflight(j.items);
       if (!silent) {
         var bad = (j.items || []).filter(function (i) { return i.level === 'bad'; });
@@ -690,6 +943,7 @@
   function renderSingle() {
     var sp = S.single;
     document.getElementById('singleTask').value = sp.task || 'wbr_flat';
+    document.getElementById('singleRobots').value = String(sp.robots || 3);
     var runSel = document.getElementById('singleRun');
     runSel.innerHTML = '';
     var runName = sp.run ? String(sp.run).split('/').pop() : '';
@@ -788,11 +1042,12 @@
 
   // 由 checkpoint 的观测维度推断承载它的 task：
   //   164=wbr_flat4(四轮) / 173=wbr_switch(起立·趴下) 一一对应；
-  //   161 现在对应**两个**任务（wbr_flat 平地 / wbr_terrain 起伏地形，观测同维）
-  //   ⇒ 先看路径里有没有 wbr_terrain 线索，再退回 wbr_flat。
+  //   161 现在对应**三个**任务（wbr_flat 平地 / wbr_terrain 起伏地形 / wbr_jump 跳跃，观测同维）
+  //   ⇒ 先看路径里有没有任务名线索，再退回 wbr_flat。
   function taskForObs(obs, path) {
     var p = String(path || '');
     if (/wbr_terrain/.test(p)) return 'wbr_terrain';
+    if (/wbr_jump|P8J/.test(p)) return 'wbr_jump';
     if (/wbr_flat4/.test(p)) return 'wbr_flat4';
     if (/wbr_switch/.test(p)) return 'wbr_switch';
     if (obs === 164) return 'wbr_flat4';
@@ -1513,10 +1768,264 @@
     applyModeToModelPage(); renderSingle();
   }
 
+  /* --------------------------------------------------- 引擎选择（Sim2Sim P2） */
+  function engineCN(e) { return e === 'mujoco' ? 'MuJoCo' : 'Isaac Gym'; }
+  // 运行中以桥上报的实际引擎为准（分段控件此时锁定）；空闲显示用户的选择
+  function displayEngine() {
+    if (S.sim && S.sim.status === 'running' && S.state && S.state.engine) return S.state.engine;
+    return S.engine;
+  }
+  function applyEngineUI() {
+    var eng = displayEngine();
+    var running = S.sim && S.sim.status === 'running';
+    document.body.classList.toggle('engine-mujoco', eng === 'mujoco');
+    $$('#engineSeg [data-engine]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-engine') === eng));
+      b.disabled = running;
+    });
+    renderEngineBadge();
+  }
+  function renderEngineBadge() {
+    var b = document.getElementById('engineBadge'); if (!b) return;
+    var running = S.sim && S.sim.status === 'running';
+    if (!running) { b.textContent = '○ ENGINE: 未启动'; b.className = 'engine-badge'; return; }
+    b.textContent = '● ENGINE: ' + engineCN(displayEngine());
+    b.className = 'engine-badge lit ' + (displayEngine() === 'mujoco' ? 'is-mujoco' : 'is-isaac');
+  }
+  function mjPersist() {
+    cfxRead();
+    try { localStorage.setItem(MJ_CFG_KEY, JSON.stringify(S.mj)); } catch (e) { }
+  }
+  function buildMujocoSpec() {
+    cfxRead();
+    var m = S.mj;
+    var slot = mjSlot();
+    var cmds = { lin_vel_x: +m.vx || 0, ang_vel_yaw: +m.yaw || 0,
+                 base_height: +m.h || slot.defH, ang_roll: +m.roll || 0,
+                 jump_height: +m.jump || 0.10 };
+    if (slot.chain) {                                        // 五槽链：契约/资产/权重全在链里
+      return { engine: 'mujoco', mode: 'mujoco', wmode: 'uni', start: slot.start,
+               terrain: !!m.terrain,
+               cmds: { lin_vel_x: +m.vx || 0, base_height: slot.defH,
+                       ang_roll: +m.roll || 0, jump_height: +m.jump || 0.10 },
+               dur: +m.dur || 0, record: !!m.record, window: !!m.window, speed: +m.speed || 1 };
+    }
+    var spec = {
+      engine: 'mujoco', mode: 'mujoco', wmode: mjSlotKey(),
+      contract: slot.contract,                               // 契约透传：serve 按此加载
+      cmds: cmds,
+      dur: +m.dur || 0, record: !!m.record, window: !!m.window, speed: +m.speed || 1
+    };
+    if (m.customPt) { spec.model = m.customPt; }
+    else { spec.release = m.release || null; spec.model = m.model || null; }
+    if (m.mjcf) spec.mjcf = m.mjcf;
+    return spec;
+  }
+
+  /* ------------------------------------------------ MuJoCo 配置页签（并入主导航） */
+  // 与运行页快启卡共用 S.mj / localStorage wbr.mj.cfg；输入用 cfx* id，互不踩。
+  function cfxRead() {
+    var g = function (id) { return document.getElementById(id); };
+    if (!g('cfxVx')) return;
+    S.mj.vx = parseFloat(g('cfxVx').value) || 0;
+    S.mj.yaw = parseFloat(g('cfxYaw').value) || 0;
+    S.mj.h = parseFloat(g('cfxH').value) || mjSlot().defH;
+    S.mj.roll = parseFloat(g('cfxRoll').value) || 0;
+    S.mj.dur = parseFloat(g('cfxDur').value) || 0;
+    S.mj.record = g('cfxRecord').checked;
+    S.mj.window = g('cfxWindow').checked;
+    S.mj.speed = parseFloat(g('cfxSpeed').value) || 1;
+    S.mj.preset = g('cfxPreset').value;
+    S.mj.slot = (g('cfxSlot') && g('cfxSlot').value) || S.mj.slot;
+    S.mj.jump = parseFloat((g('cfxJump') || {}).value) || S.mj.jump || 0.10;
+    if (g('cfxTerrain')) S.mj.terrain = g('cfxTerrain').checked;
+    S.mj.customPt = g('cfxCustomPt').value.trim();
+    var sel = g('cfxRelease');
+    S.mj.release = sel.value || '';
+    var opt = sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex] : null;
+    S.mj.model = (opt && opt.getAttribute('data-model')) || '';   // release 下拉里选中的 ckpt 文件名
+    S.mj.mjcf = g('cfxMjcf').value || '';
+  }
+  function cfxRestore() {
+    var g = function (id) { return document.getElementById(id); };
+    if (!g('cfxVx')) return;
+    cfxRenderMode();
+    cfxFillPresetOptions();
+    g('cfxVx').value = S.mj.vx; g('cfxYaw').value = S.mj.yaw; g('cfxH').value = S.mj.h;
+    g('cfxRoll').value = S.mj.roll || 0;
+    g('cfxDur').value = S.mj.dur; g('cfxRecord').checked = !!S.mj.record; g('cfxWindow').checked = !!S.mj.window;
+    g('cfxSpeed').value = String(S.mj.speed || 1);
+    g('cfxCustomPt').value = S.mj.customPt || '';
+    if (g('cfxTerrain')) g('cfxTerrain').checked = !!S.mj.terrain;
+  }
+  // —— 槽位切换（S3）：换契约、清选型、换 MJCF、量程/预设随槽位重建
+  function mjSetSlot(key) {
+    if (!MJ_SLOTS[key] || S.mj.slot === key) return;
+    S.mj.slot = key;
+    var sl = MJ_SLOTS[key];
+    S.mj.release = ''; S.mj.model = '';
+    S.mj.mjcf = sl.mjcf || '';
+    S.mj.h = sl.defH;
+    S.mj.roll = 0;
+    S.mj.start = sl.start || '2w';
+    if (!mjPresets()[S.mj.preset]) S.mj.preset = 'stand';
+    cfxRestore();
+    cfxFillPresetOptions();
+    cfxFillModels();
+    cfxFillManifest();
+    cfxRenderMode();
+    mjPersist();
+  }
+  function cfxRenderMode() {
+    var sel = document.getElementById('cfxSlot');
+    if (sel) sel.value = mjSlotKey();
+    var sl = mjSlot();
+    var box = document.getElementById('cfxChainBox');
+    if (box) box.hidden = !sl.chain;
+    var tbox = document.getElementById('cfxTerrainBox');
+    if (tbox) tbox.hidden = !sl.chain;      // 地形只对五槽链开放（单槽各自契约）
+    var cs = document.getElementById('cfxChainStart');
+    if (cs) cs.value = sl.start || '2w';
+    var rollEl = document.getElementById('cfxRoll');
+    if (rollEl) {
+      rollEl.disabled = !sl.roll;
+      rollEl.title = sl.roll ? '两轮 roll 指令范围 [-0.2, 0.2]' : '四轮/趴下 roll 指令范围退化（置灰）';
+    }
+    var rel = document.getElementById('cfxRelease');
+    if (rel) rel.disabled = !!sl.chain;
+    var pt = document.getElementById('cfxCustomPt');
+    if (pt) pt.disabled = !!sl.chain;
+  }
+  function cfxFillPresetOptions() {
+    var sel = document.getElementById('cfxPreset'); if (!sel) return;
+    var ps = mjPresets();
+    sel.innerHTML = '';
+    Object.keys(ps).forEach(function (k) {
+      sel.appendChild(el('option', { value: k, text: ps[k].label || k }));
+    });
+    if (!ps[S.mj.preset]) S.mj.preset = 'stand';
+    sel.value = S.mj.preset;
+  }
+  function cfxFillModels() {
+    var sel = document.getElementById('cfxRelease'); if (!sel) return;
+    var sl = mjSlot();
+    var wantObs = sl.obs;
+    sel.innerHTML = '';
+    if (sl.chain) {
+      sel.appendChild(el('option', { text: '（链内固定四槽权重，见下方契约栏）', value: '' }));
+      S.mj.release = ''; S.mj.model = '';
+      mjPersist();
+      return;
+    }
+    sel.appendChild(el('option', { text: '（契约默认交付：' + (sl.release || '—') + '）', value: '' }));
+    var groups = {};
+    (S.checkpoints || []).forEach(function (c) {
+      if (c.obs !== wantObs) return;
+      var d = c.path.split('/').slice(0, -1).join('/');
+      (groups[d] = groups[d] || []).push(c);
+    });
+    var dirs = Object.keys(groups).sort();
+    dirs.forEach(function (d) {
+      var best = groups[d].sort(function (a, b) { return (b.mtime || 0) - (a.mtime || 0); })[0];
+      var o = el('option', { text: d.split('/').pop() + ' · ' + best.ckpt + ' · obs ' + best.obs + '/act ' + best.act, value: d });
+      o.setAttribute('data-model', best.ckpt);
+      sel.appendChild(o);
+    });
+    if (S.mj.release && groups[S.mj.release]) sel.value = S.mj.release;
+    else { sel.value = ''; S.mj.release = ''; S.mj.model = ''; }
+    mjPersist();
+  }
+  function cfxFillManifest() {
+    if (!document.getElementById('cfxMjcf')) return Promise.resolve();
+    return GET('/api/mujoco/manifest').then(function (m) {
+      var sel = document.getElementById('cfxMjcf');
+      sel.innerHTML = '';
+      (m.mjcfs || []).forEach(function (f) {
+        sel.appendChild(el('option', { text: f.name + (f.mesh ? '（网格）' : '（无网格）'), value: f.path }));
+      });
+      // 槽位自带资产优先：持久化里存的资产与当前槽不一致时（如旧的两轮 wbr_v1）纠正回槽位资产
+      var want = mjSlot().mjcf;
+      if (want) {
+        var wantBase = want.split('/').pop();
+        var curBase = (S.mj.mjcf || '').split('/').pop();
+        if (curBase !== wantBase) {
+          for (var i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].value.split('/').pop() === wantBase) { sel.selectedIndex = i; S.mj.mjcf = sel.value; break; }
+          }
+        }
+      }
+      if (S.mj.mjcf) sel.value = S.mj.mjcf; else if (sel.options.length) sel.selectedIndex = 0;
+      document.getElementById('cfxMjcfSha').textContent = 'sha ' + (m.mjcfs && m.mjcfs[sel.selectedIndex] ? m.mjcfs[sel.selectedIndex].sha256 : '—');
+      var ck = mjSlot().chain ? 'four' : mjSlotKey();
+      var c = (m.contracts || {})[ck] || (m.contracts || {}).four || m.contract || {};
+      var hrg = (c.command_ranges || {}).base_height || [];
+      document.getElementById('cfxContract').innerHTML = '契约（' + mjSlot().cn + '）：obs <b>' + (c.obs_dim || '—') + '</b> / act <b>' + (c.act_dim || '—') +
+        '</b> · 默认交付 <b>' + (c.release || '—') + '</b> / <b>' + (c.release_model || '—') +
+        '</b> · Height 量程 <b>' + hrg.join('–') + '</b>';
+      var hEl = document.getElementById('cfxH');               // 高度量程随契约收放
+      if (hEl && hrg.length === 2) { hEl.min = hrg[0]; hEl.max = hrg[1]; }
+      cfxRenderMode();
+      var p = ((m.parities || {})[ck]) || m.parity || {};
+      var worst = function (kind) {
+        var sc = p.scenarios || {}; var v = 0;
+        Object.keys(sc).forEach(function (k) { var x = sc[k][kind]; if (x && x.max > v) v = x.max; });
+        return v;
+      };
+      var g = p.gates || {};
+      document.getElementById('cfxParity').innerHTML =
+        '<b>' + (p.passed ? '✅ PASS' : '❌ 未过') + '</b> · 场景 <b>' + Object.keys(p.scenarios || {}).length + '</b> 组' +
+        ' · obs 最差 <b>' + worst('obs').toExponential(1) + '</b>（门 ' + (g.obs != null ? g.obs : '—') + '）' +
+        ' · act 最差 <b>' + worst('act').toExponential(1) + '</b>（门 ' + (g.act != null ? g.act : '—') + '）' +
+        ' · τ 最差 <b>' + worst('tau').toExponential(1) + '</b>（门 ' + (g.tau != null ? g.tau : '—') + '）' +
+        (p.policy ? '<br>权重 <span class="mono">' + (p.policy.ckpt || '').split('/').slice(-2).join('/') + '</span> · iter <b>' + p.policy.iter + '</b> · sha <span class="mono">' + String(p.policy.sha256 || '').slice(0, 8) + '</span>' : '');
+    }).catch(function () { document.getElementById('cfxParity').textContent = '对账数据读取失败（eval/golden/parity.json）'; });
+  }
+  function cfxRenderChecks(items) {
+    var box = document.getElementById('cfxChecks'); if (!box) return;
+    box.innerHTML = '';
+    (items || []).forEach(function (p) {
+      var mark = p.level === 'ok' ? '✓' : p.level === 'warn' ? '⚠' : p.level === 'bad' ? '✗' : '·';
+      box.appendChild(el('span', { class: p.level, style: 'font-size:.74rem;display:block' },
+        [el('b', { text: mark }), document.createTextNode(' ' + p.text)]));
+    });
+  }
+  function cfxStart() {
+    mjPersist();
+    POST('/api/preflight', { spec: buildMujocoSpec() }).then(function (j) {
+      cfxRenderChecks(j.items);
+      var bad = (j.items || []).filter(function (i) { return i.level === 'bad'; }).length;
+      var doLaunch = function () {
+        POST('/api/start', { spec: buildMujocoSpec() }).then(function (r) {
+          toast('已启动：' + r.run + '，切到运行页控制', 'ok');
+          switchTab('run');
+        }).catch(function (e) {
+          var p = e.payload || {};
+          if (p.items) cfxRenderChecks(p.items);
+          toast('启动失败：' + (p.text || e.message), 'bad');
+        });
+      };
+      if (bad > 0) {
+        if (window.confirm('预检有 ' + bad + ' 项不通过，仍要强制启动吗？')) doLaunch();
+        else toast('已取消（先解决预检项）', 'warn');
+      } else doLaunch();
+    }).catch(function (e) { toast('预检失败：' + e.message, 'bad'); });
+  }
+
+  // —— 置灰矩阵（设计稿 §3）：单点实现。要锁的控件在 app.html/renderNav 标 data-mj-locked
+  //    （+data-mj-why 文案），视觉由 CSS body.engine-mujoco [data-mj-locked] 统一处理；
+  //    这里只装两个守卫：capture 级委托点击（拦截动作、弹一次提示）＋ 键盘（M/H/U/O/J/L）。
+  function mjGuardToast(msg) {
+    if (applyEngineUI._t) return;
+    toast(msg, 'warn');
+    applyEngineUI._t = true;
+    setTimeout(function () { applyEngineUI._t = false; }, 1800);
+  }
+
   /* ------------------------------------------------------------------ 启动 */
   function doStart(force) {
     if (OFFLINE) { toast('离线预览不能启动仿真', 'warn'); return; }
-    POST('/api/start', { spec: buildSpec(), force: !!force }).then(function (j) {
+    var spec = (S.engine === 'mujoco') ? buildMujocoSpec() : buildSpec();
+    POST('/api/start', { spec: spec, force: !!force }).then(function (j) {
       toast('已启动：' + j.run, 'ok'); refreshStatus();
     }).catch(function (e) {
       var p = e.payload || {};
@@ -1533,9 +2042,21 @@
     POST('/api/stop', {}).then(function () { toast('已停止', 'ok'); refreshStatus(); }).catch(function (e) { toast(e.message, 'bad'); });
   }
 
+  var lastSimStatus = null;
   function refreshStatus() {
     if (OFFLINE) { renderSimState(); return; }
     GET('/api/status').then(function (j) {
+      // 【Sim2Sim】仿真自己退出（如 MuJoCo 终止判定摔倒）不再无声：拉尾日志给一行原因
+      if (lastSimStatus === 'running' && j.status === 'idle') {
+        var rid = (S.sim && S.sim.run) || '';
+        GET('/api/runlog?id=' + encodeURIComponent(rid)).then(function (r) {
+          var lines = (r.text || '').split('\n').filter(function (l) { return l.trim(); });
+          var tail = lines.slice(-2).join(' ｜ ');
+          if (/终止判定|Traceback|Error/.test(tail)) toast('仿真已退出：' + tail.slice(-180), 'bad');
+          else toast('仿真已退出', 'warn');
+        }).catch(function () { toast('仿真已退出', 'warn'); });
+      }
+      lastSimStatus = j.status;
       S.sim = j; renderSimState(); renderStatus(S.state);
     }).catch(function () { });
   }
@@ -1547,12 +2068,33 @@
       if (st.sim) { S.sim = st.sim; renderSimState(); }
       if (st.bridgeDown) return;
       S.state = st; updateReadouts(st);
+      // 【A+B】每拍刷新指令回执条与动作按钮解禁状态（守卫表来自桥）
+      renderStatus(st);
       if (S.tab === 'plot') updateCfgChip();
     }).catch(function () { });
   }
 
   /* --------------------------------------------------- 原生窗口停靠（P3） */
-  var DOCK = { on: false, polling: false, timer: null, tries: 0, rect: null, cal: null, calTries: 0, calT: null };
+  var DOCK = { on: false, polling: false, timer: null, tries: 0, rect: null, cal: null, calTries: 0, calT: null, lastSeen: null };
+  var dockWatch = null;
+
+  // 【Sim2Sim】停靠保持看门狗：DOCK.on 期间每 3 s 拿窗口实测几何与目标比对，漂移 >8px 静默重贴
+  //（MuJoCo viewer 初始化后期挪窗 / WM 干预 / 误拖后都能自动回位；Isaac 同样受益）。
+  function dockWatchStart() {
+    clearInterval(dockWatch);
+    dockWatch = setInterval(function () {
+      if (!DOCK.on || S.sim.status !== 'running' || !DOCK.rect) return;
+      GET('/api/window').then(function (j) {
+        var st = (j.status || {});
+        if (!st.found) return;                    // 窗口暂不可查（终止/最小化）：不动，等仿真层处理
+        var r = DOCK.rect;
+        if (Math.abs(st.x - r.x) > 8 || Math.abs(st.y - r.y) > 8 ||
+            Math.abs((st.w || 0) - r.w) > 8 || Math.abs((st.h || 0) - r.h) > 8) {
+          dockWindow(false);
+        }
+      }).catch(function () { });
+    }, 3000);
+  }
 
   function setVpStatus(text) {
     var c = document.getElementById('vpCorner');
@@ -1608,30 +2150,37 @@
 
   function dockWindow(manual) {
     if (OFFLINE) { if (manual) toast('离线预览不能停靠', 'warn'); return; }
+    // 【P8 五槽】对齐的三级目标来源（vpRectDevice 原逻辑保留）：
+    //   ① DOCK.xform（校准对齐 2 点解算，或点击校准自动解出——见 /api/point 应答）⇒ 精确；
+    //   ② 浏览器 screenX 估算（多屏/分数缩放下不准）⇒ 尽力而为。
     var rect = vpRectDevice();
     if (!rect) {
       setVpStatus('仿真视口 · 该视图拿不到屏幕坐标');
       if (manual) toast('当前视图是嵌入式面板，拿不到屏幕坐标；用普通浏览器窗口打开本页或点「独立窗口」', 'warn');
       return;
     }
-    // 叠加校准偏移（设备像素）：补偿浏览器边框/DPR 估算误差，让原生窗口精确落在视口上
     var send = { x: Math.round(rect.x + (DOCK.cal ? DOCK.cal.x : 0)),
                  y: Math.round(rect.y + (DOCK.cal ? DOCK.cal.y : 0)),
                  w: rect.w, h: rect.h };
     setVpStatus('仿真视口 · 定位中 x' + send.x + ' y' + send.y + ' ' + send.w + '×' + send.h);
     POST('/api/window/dock', send).then(function (j) {
       var st = j.status || {};
+      if (j.needcal) { DOCK.on = false; setVpStatus('仿真视口 · 校准不足——用鼠标点几处不同按钮后重试'); return; }
       if (!st.found) {
         DOCK.on = false; setVpStatus('仿真视口 · 未找到仿真窗口');
         if (manual) toast('没找到 Isaac Gym 窗口（可能还在启动）', 'warn');
         return;
       }
       DOCK.on = true; DOCK.rect = rect;
-      // 自校正：比对窗口实际左上角与目标（二者都是设备像素），偏差 > 6px 就累计校准偏移重贴（最多 3 次，防抖）
+      dockWatchStart();
+      // 自校正：比对窗口实际左上角与目标（二者都是设备像素），偏差 > 6px 就累计校准偏移重贴（最多 3 次，防抖）。
+      // 【Sim2Sim】只认**小偏差**（<200px）为换算误差；大偏差是 WM 覆盖/窗口未就位（实测 MuJoCo 新窗
+      // 会被 mutter 初始放置覆盖，一秒内又回目标位）——此时目标没错，不能纠偏，交给看门狗重贴拉回。
       if (st.x != null && st.y != null) {
         var errX = st.x - send.x;
         var errY = st.y - send.y;
-        if ((Math.abs(errX) > 6 || Math.abs(errY) > 6) && (DOCK.calTries || 0) < 3) {
+        if ((Math.abs(errX) > 6 || Math.abs(errY) > 6) &&
+            Math.abs(errX) < 200 && Math.abs(errY) < 200 && (DOCK.calTries || 0) < 3) {
           DOCK.cal = { x: (DOCK.cal ? DOCK.cal.x : 0) - errX, y: (DOCK.cal ? DOCK.cal.y : 0) - errY };
           DOCK.calTries = (DOCK.calTries || 0) + 1;
           clearTimeout(DOCK.calT);
@@ -1659,6 +2208,7 @@
   function undockWindow(silent) {
     DOCK.on = false; DOCK.rect = null;
     clearInterval(DOCK.timer); DOCK.polling = false;
+    clearInterval(dockWatch);
     if (OFFLINE) return;
     POST('/api/window/undock', {}).catch(function () { });
     if (!silent) setVpStatus('仿真视口 · 已降下');
@@ -1671,6 +2221,7 @@
     DOCK.polling = true;
     clearInterval(DOCK.timer);
     DOCK.tries = 0;
+    DOCK.lastSeen = null;
     DOCK.timer = setInterval(function () {
       if (S.tab !== 'run' || (S.sim.status !== 'running' && !manual)) {
         DOCK.polling = false; clearInterval(DOCK.timer); return;
@@ -1682,7 +2233,14 @@
       }
       GET('/api/window').then(function (j) {
         if (j.status && j.status.found) {
-          DOCK.polling = false; clearInterval(DOCK.timer); dockWindow(manual);
+          var st = j.status;
+          // 【Sim2Sim】贴前等几何稳定：连续两拍一致才贴（MuJoCo viewer 初始化会先建窗再挪，贴早了白贴）
+          var g = [st.x, st.y, st.w, st.h, st.mapped].join(',');
+          if (g === DOCK.lastSeen) {
+            DOCK.polling = false; clearInterval(DOCK.timer); dockWindow(manual);
+          } else {
+            DOCK.lastSeen = g;
+          }
         }
       }).catch(function () { });
     }, 1000);
@@ -1690,10 +2248,17 @@
 
   // 视口尺寸变了（窗口缩放/导航模式切换）→ 重新贴合
   var dockResizeT = null;
+  var lastVpSize = null;
   function onViewportResize() {
     if (!DOCK.on) return;
+    var vp = document.getElementById('viewport');
+    if (vp) {
+      var w = Math.round(vp.getBoundingClientRect().width), h = Math.round(vp.getBoundingClientRect().height);
+      if (lastVpSize && Math.abs(w - lastVpSize.w) < 8 && Math.abs(h - lastVpSize.h) < 8) return;
+      lastVpSize = { w: w, h: h };
+    }
     clearTimeout(dockResizeT);
-    dockResizeT = setTimeout(function () { dockWindow(false); }, 250);
+    dockResizeT = setTimeout(function () { dockWindow(false); }, 600);
   }
 
   /* ---- 2 点指针校准（多显示器 / 分数缩放下的窗口对齐）----
@@ -1756,20 +2321,36 @@
     }).catch(function (e) { toast('校准失败：' + (e.message || e), 'bad'); cancelCal(); });
   }
 
+  // 【P8 五槽】浏览器最小化/遮挡 → 停靠的 Isaac 窗口自动降下（置顶无边框窗会悬空卡死，
+  //   无法移动/最小化——11-04 作者实测）；恢复可见 → 自动重新贴合。
+  document.addEventListener('visibilitychange', function () {
+    if (OFFLINE) return;
+    if (document.hidden) {
+      if (DOCK.on) undockWindow(true);
+    } else if (S.tab === 'run' && S.sim && S.sim.status === 'running') {
+      DOCK.on = false;
+      dockWhenReady(false);
+    }
+  });
+
   // 浏览器窗口被拖动时没有事件：每 2s 比对一次矩形，变了就重新贴合
+  var dockAssert = 0;
   setInterval(function () {
-    if (!DOCK.on || S.tab !== 'run') return;
+    if (!DOCK.on || S.tab !== 'run') { dockAssert = 0; return; }
+    dockAssert += 1;
     var r = vpRectDevice();
     if (!r || !DOCK.rect) return;
-    if (Math.abs(r.x - DOCK.rect.x) > 4 || Math.abs(r.y - DOCK.rect.y) > 4 ||
-      Math.abs(r.w - DOCK.rect.w) > 4 || Math.abs(r.h - DOCK.rect.h) > 4) dockWindow(false);
+    var moved = Math.abs(r.x - DOCK.rect.x) > 4 || Math.abs(r.y - DOCK.rect.y) > 4 ||
+      Math.abs(r.w - DOCK.rect.w) > 4 || Math.abs(r.h - DOCK.rect.h) > 4;
+    // 【P8 五槽】矩形变了立即重贴；每 ~10s 无条件重贴一次（防 WM 拉回/瞬态失败后不自愈）
+    if (moved || dockAssert >= 5) { dockAssert = 0; dockWindow(false); }
   }, 2000);
 
 
   // 统一动作入口（按钮与快捷键共用）
   function doAction(a) {
     if (a === 'armjump') {
-      // 单策略恒可跳；uni 仅两轮可跳（后端会二次校验并在非两轮时提示）。离线预览拦截。
+      // 桥/链守卫是唯一事实源：链模式下由 allowed 表决定，单槽由 canJump 决定。离线预览拦截。
       if (OFFLINE) { toast('离线预览', 'warn'); return; }
       POST('/api/action', { action: a }).then(function (r) {
         if (r.msg && r.msg !== a) toast(r.msg, 'warn'); else toast('已下发：' + a, 'ok');
@@ -1797,14 +2378,26 @@
     v = Math.round(v / spec.step) * spec.step;
     e.inp.value = v; e.vTxt.textContent = fmt(v, spec.d);
     e.tri.children[0].textContent = 'in ' + fmt(v, spec.d);
+    if (key === 'ang_vel_yaw' && yawTemp.base !== null) yawTemp.base = v;   // 临时偏航期间 a/d 改值 ⇒ 记为新基值
     if (OFFLINE) return;
     POST('/api/cmd', { key: key, value: v }).catch(function () { });
   }
 
   // 指令重置到「当前模式默认位」：滑块与下发值一起回默认（四轮 h=0.19、两轮 h=0.28，其余归 0）
+  // 当前「默认高度」的唯一出处：初始姿态 / 滑条默认显示 / 空格复位三处共用
+  function currentDefH() {
+    var st = S.state || {};
+    var mj = (st.engine === 'mujoco') || (S.engine === 'mujoco');
+    if (mj) {
+      if (st.chain) return (st.slot === 'IDLE2W') ? 0.25 : 0.19;   // 链：两轮槽 0.25，四轮/趴下 0.19
+      var sl = mjSlot(); return (sl && sl.defH) || 0.19;
+    }
+    var mk = st.modeKey || 'FOURW';
+    return (mk === 'TWOW') ? 0.28 : 0.19;
+  }
   function resetChannelsToDefault() {
-    var modeKey = (S.state && S.state.modeKey) || 'FOURW';
-    var defH = (modeKey === 'TWOW') ? 0.28 : 0.19;
+    var defH = currentDefH();
+    yawTemp.held = 0; yawTemp.base = null;   // 清临时偏航态（重置后的 yaw=0 即为设定值）
     var home = { lin_vel_x: 0, ang_vel_yaw: 0, base_height: defH, ang_roll: 0 };
     Object.keys(home).forEach(function (key) {
       var spec = CHANNELS.find(function (c) { return c.key === key; }); if (!spec) return;
@@ -1817,7 +2410,7 @@
     if (!OFFLINE) toast('指令已重置到默认位（h=' + defH.toFixed(3) + '）', 'ok');
   }
 
-  // 运行页快捷键：W/S A/D Q/E J/L 通道；U/O 跳跃高度 −/+；H 装填跳；空格 指令回默认；M 切模式；R 复位
+  // 运行页快捷键：W/S A/D Q/E(按住临时偏航±0.5) J/L 通道；U/O 跳跃高度 −/+；H 装填跳；空格 指令回默认；M 切模式；R 复位
   function handleRunKey(e) {
     if (S.tab !== 'run') return false;
     if (e.ctrlKey || e.metaKey || e.altKey) return false;
@@ -1829,6 +2422,8 @@
       case 's': case 'S': nudgeChannel('lin_vel_x', -0.05); break;
       case 'a': case 'A': nudgeChannel('ang_vel_yaw', -0.05); break;
       case 'd': case 'D': nudgeChannel('ang_vel_yaw', 0.05); break;
+      case 'q': case 'Q': yawTempStart(-1, 1); break;   // 按住临时偏航 −0.5，松开恢复
+      case 'e': case 'E': yawTempStart(1, 2); break;    // 按住临时偏航 +0.5，松开恢复
       case 'i': case 'I': nudgeChannel('base_height', 0.005); break;
       case 'k': case 'K': nudgeChannel('base_height', -0.005); break;
       case 'j': case 'J': nudgeChannel('ang_roll', -0.02); break;
@@ -1845,6 +2440,80 @@
   }
 
   function bind() {
+    // 【Sim2Sim P3】置灰矩阵守卫：capture 级拦截 + 键盘（置灰不隐藏，动作不执行只提示）
+    document.addEventListener('click', function (ev) {
+      if (!document.body.classList.contains('engine-mujoco')) return;
+      var n = ev.target && ev.target.closest ? ev.target.closest('[data-mj-locked]') : null;
+      if (!n) return;
+      ev.preventDefault(); ev.stopPropagation();
+      mjGuardToast(n.getAttribute('data-mj-why') || 'MuJoCo 下不可用');
+    }, true);
+    document.addEventListener('keydown', function (ev) {
+      if (!document.body.classList.contains('engine-mujoco')) return;
+      var k = (ev.key || '').toLowerCase();
+      if (['m', 'h', 'u', 'o', 'j', 'l'].indexOf(k) < 0) return;   // 模式/装填/跳跃高度/roll
+      // 【A+B】链模式：快捷键全部放行（动作键 → doAction，通道键 → nudgeChannel）
+      if (S.state && S.state.chain) return;
+      if (k === 'h' && S.state && S.state.canJump) return;          // 跳跃槽允许装填
+      var tag = ((ev.target && ev.target.tagName) || '').toLowerCase();
+      if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+      mjGuardToast('MuJoCo 单策略（四轮）不支持该操作');
+    }, true);
+    // 【Sim2Sim P2】引擎分段控件：只切启动面板；运行中被拒
+    $$('#engineSeg [data-engine]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var eng = b.getAttribute('data-engine');
+        if (eng === S.engine) return;
+        if (S.sim && S.sim.status === 'running') { toast('先停止仿真，再切换引擎', 'warn'); return; }
+        S.engine = eng; store.set('engine', eng);
+        applyEngineUI();
+        runPreflight(true);
+      });
+    });
+    // 【Sim2Sim】MuJoCo 配置页签（cfx*）：输入持久化 + 预检/导出/启动
+    var mjBind = function (id, ev) {
+      var n = document.getElementById(id); if (n) n.addEventListener(ev, mjPersist);
+    };
+    ['cfxVx', 'cfxYaw', 'cfxH', 'cfxRoll', 'cfxJump', 'cfxDur', 'cfxCustomPt', 'cfxSpeed', 'cfxRelease', 'cfxMjcf', 'cfxTerrain'].forEach(function (id) { mjBind(id, 'change'); });
+    mjBind('cfxRecord', 'change'); mjBind('cfxWindow', 'change');
+    var slotSel = document.getElementById('cfxSlot');
+    if (slotSel) slotSel.addEventListener('change', function () { mjSetSlot(slotSel.value); });
+    var csSel = document.getElementById('cfxChainStart');
+    if (csSel) csSel.addEventListener('change', function () {
+      var k = S.mj.slot === 'uni4' ? 'uni4' : 'uni';
+      S.mj.start = csSel.value;
+      MJ_SLOTS[k].start = csSel.value;
+      mjPersist();
+    });
+    var cfxP = document.getElementById('cfxPreset');
+    if (cfxP) cfxP.addEventListener('change', function () {
+      var p = mjPresets()[cfxP.value]; if (!p) return;
+      document.getElementById('cfxVx').value = p.vx;
+      document.getElementById('cfxYaw').value = p.yaw;
+      document.getElementById('cfxH').value = p.h;
+      mjPersist();
+    });
+    var cfxBtn = document.getElementById('cfxCheckBtn');
+    if (cfxBtn) cfxBtn.addEventListener('click', function () {
+      mjPersist();
+      POST('/api/preflight', { spec: buildMujocoSpec() }).then(function (j) {
+        cfxRenderChecks(j.items);
+        var bad = (j.items || []).filter(function (i) { return i.level === 'bad'; }).length;
+        toast(bad ? ('预检有 ' + bad + ' 项不通过') : '预检通过', bad ? 'bad' : 'ok');
+      }).catch(function (e) { toast('预检失败：' + e.message, 'bad'); });
+    });
+    var cfxExp = document.getElementById('cfxExportBtn');
+    if (cfxExp) cfxExp.addEventListener('click', function () {
+      cfxExp.disabled = true;
+      POST('/api/mujoco/export', {}).then(function (j) {
+        var w = window.open('', '_blank');
+        if (w) w.document.write('<title>' + j.path + '</title><body style="margin:0;background:#111;display:flex;align-items:center;justify-content:center"><img style="max-width:100%;max-height:100%" src="' + j.dataUrl + '"></body>');
+        else toast('已导出 ' + j.path, 'ok');
+      }).catch(function (e) { toast('导出失败：' + (e.payload && e.payload.error || e.message), 'bad'); })
+        .finally(function () { cfxExp.disabled = false; });
+    });
+    var cfxStartBtn = document.getElementById('cfxStartBtn');
+    if (cfxStartBtn) cfxStartBtn.addEventListener('click', cfxStart);
     // 导航位置/配色的绑定在 renderTopCtrls 里随块重建（块会在顶部/右侧间搬迁），此处不再重复绑定
     $$('[data-vp]').forEach(function (b) {
       b.addEventListener('click', function () {
@@ -1910,6 +2579,7 @@
       document.getElementById(id).addEventListener('change', renderPicker);
     });
     document.getElementById('singleTask').addEventListener('change', function (e) { S.single.task = e.target.value; persistSlots(); renderSingle(); runPreflight(true); });
+    document.getElementById('singleRobots').addEventListener('change', function (e) { S.single.robots = parseInt(e.target.value, 10) || 3; persistSlots(); runPreflight(true); });
     document.getElementById('singleCkpt').addEventListener('change', function (e) {
       var v = e.target.value;
       S.single.checkpoint = (v === '' ? null : parseInt(v, 10));
@@ -1947,6 +2617,12 @@
         if (ti < TABS.length) { switchTab(TABS[ti].key); return; }
       }
       if (handleRunKey(e)) { e.preventDefault(); }
+    });
+    // 【P7F4】Q/E 临时偏航的松开恢复（与 keydown 在同一开关块，焦点过滤一致）
+    document.addEventListener('keyup', function (e) {
+      if (e.target && e.target.matches && e.target.matches('input, select, textarea, [contenteditable]')) return;
+      if (e.key === 'q' || e.key === 'Q') yawTempEnd(1);
+      else if (e.key === 'e' || e.key === 'E') yawTempEnd(2);
     });
     // 窗口缩放/导航模式切换后重新贴合原生窗口
     window.addEventListener('resize', onViewportResize);
@@ -2019,6 +2695,7 @@
         document.getElementById('runScenarioPill').textContent = '场景：' + active.name + ' ▾';
       }
       renderChain(); renderChainParams(); renderSingle(); applyModeToModelPage();
+      applyEngineUI();
       renderSimState(); runPreflight(true);
       ensureCheckpoints().then(function () { enrichSlots(); renderChain(); renderSingle(); runPreflight(true); });
       document.getElementById('brandSub').textContent = 'WBR 控制台 · 在线';

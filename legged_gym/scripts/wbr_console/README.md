@@ -4,6 +4,9 @@ WBR 综合试验台的本地网页控制台。**P2/P3/P4 已完成**（启动与
 **P5 独立化完成（2026-10-26）**：整个控制台连同它需要的 play/plot 核心打包在**本目录内**，
 不再依赖 `scripts/play02.py` / `scripts/plot02.py`（两份原文件保持一行不改；2026-10-26 已裁「保留不删」）。
 
+**MuJoCo 引擎（Sim2Sim）已接入（2026-11-05，P1~P3）**：运行页左上角分段控件 `[Isaac Gym │ MuJoCo]`
+选引擎，同一运行页驱动；MuJoCo 配置是主导航里的**「MuJoCo 配置」页签**（与快启卡共用同一份设置）。详见下文「MuJoCo 引擎」一节。
+
 > **独立化方式**：`deps/play02_core.py` 与 `deps/plot02_core.py` 是 `scripts/play02.py`、`scripts/plot02.py`
 > 的逐字副本（函数体未动），差异只有 `DATA_DIR` / `REPO_ROOT` 改为按 `__file__` 推导、顶部加了出处说明。
 > 改命令行版时需同步复制到本目录，否则两边结果会不一致。
@@ -12,11 +15,12 @@ WBR 综合试验台的本地网页控制台。**P2/P3/P4 已完成**（启动与
 
 ```
 wbr_console/
-├── app.html / app.css / app.js   前端（3 页签 + 3 弹窗；后端不可达时自动退回 mock 离线预览）
-├── wbr_bench.py        后端：静态站点 + 试验台 API + 控制桥代理（纯标准库）
-├── wbr_bench_run.py    仿真进程入口：from deps import play02_core as play02，
+├── app.html / app.css / app.js   前端（5 页签：运行/模型/MuJoCo 配置/绘图/说明；后端不可达时自动退回 mock 离线预览）
+├── wbr_bench.py        后端：静态站点 + 试验台 API + 控制桥代理（纯标准库；ENGINES 表分引擎）
+├── wbr_bench_run.py    Isaac 仿真进程入口：from deps import play02_core as play02，
 │                       替换 start_gui_thread / _build_switch 后跑 play02.play02(args)
-├── bench_bridge.py     仿真进程内 HTTP 控制口（读写 gui_cmds/mode_shared/jump_flags/readout）
+├── bench_bridge.py     Isaac 仿真进程内 HTTP 控制口（HTTP 骨架来自 bridge_common）
+├── bridge_common.py    控制桥共享 HTTP 骨架：路由/端口扫描/SIGINT 自杀（Isaac 与 MuJoCo 桥同一份协议实现）
 ├── bench_store.py      存储层：settings / scenarios / saved / runs（STORE_DIR=本目录内）
 ├── bench_models.py     checkpoint 扫描 + obs/act 探测（批量子进程 + mtime 缓存）
 ├── bench_plot.py       绘图数据层：from deps import plot02_core，补 switch 面板
@@ -52,14 +56,15 @@ python3 wbr_bench.py --port 8770 --bridge-port 8771
   └─ /api/start /api/stop /api/preflight /api/cmd /api/action
         │  （/api/cmd、/api/action 代理到 ↓）
         ▼
-wbr_bench.py（试验台服务，纯标准库）
-        │  subprocess
+wbr_bench.py（试验台服务，纯标准库；ENGINES 表按 spec.engine 分支）
+        │  subprocess（按引擎选解释器：isaacgym01 / mujoco env）
+        ├─ engine=isaac ─► wbr_bench_run.py ── from deps import play02_core as play02
+        │                   └─ play02.start_gui_thread = bench_bridge.install（桥与副本共享同一模块对象）
+        │                   └─ play02._build_switch 运行时包装（衔接参数 + 腿 P 增益倍率 + 传统起立参数）
+        └─ engine=mujoco ─► sim2sim_mujoco/serve.py（一核两壳，见其目录 README）
+                            └─ sim_loop.SimLoop（限速→obs→actor→200Hz 力矩）+ mj_bridge 控制桥
         ▼
-wbr_bench_run.py ── from deps import play02_core as play02（原 scripts/play02.py 不参与）
-                    └─ play02.start_gui_thread = bench_bridge.install（桥与副本共享同一模块对象）
-                    └─ play02._build_switch 运行时包装（注入衔接参数 + 腿 P 增益倍率 + 传统起立参数）
-        ▼
-仿真进程 :8771（bench_bridge）
+仿真进程 :8771（bench_bridge / mj_bridge，同一份协议）
    读 readout → /api/state；写 gui_cmds / mode_shared / jump_flags
 ```
 
@@ -162,12 +167,110 @@ settings 旧值（根因之二），均已修复并走全 UI 链路复验（见�
 | POST | `/api/app/open` `{url}` | 用 `--app` 开一个真浏览器窗口（嵌入式面板里停靠的出路） |
 | POST | `/api/plot/save` | 分图 PNG 存到 ~/Downloads |
 | GET | `/api/runlog?id=` | 某次运行的 console.log 尾部 |
-| POST | `/api/start` `{spec,force}` | 起仿真（先预检；训练占用默认拦截） |
+| POST | `/api/start` `{spec,force}` | 起仿真（先预检；Isaac 训练占用默认拦截，MuJoCo 纯 CPU 放行） |
 | POST | `/api/stop` | 停仿真（SIGTERM→SIGKILL，先收仿真防孤儿） |
-| POST | `/api/preflight` `{spec}` | 预检：权重存在/维度匹配/显卡/训练进程 |
+| POST | `/api/preflight` `{spec}` | 预检（按引擎分发：Isaac 权重/显卡/训练；MuJoCo 解释器/MJCF/契约/端口） |
 | POST | `/api/cmd` `{key,value}` | 下发指令（代理到桥） |
 | POST | `/api/action` `{action,value}` | toggle/rise/lower/reset/armjump/auto |
 | POST/DELETE | `/api/scenarios` `/api/saved` | 保存/删除场景、固化/删除存档 |
+| GET | `/api/mujoco/manifest` | MuJoCo 配置页清单：MJCF+sha / S0 parity 读数 / 契约要点 |
+| POST | `/api/mujoco/export` | 用 mujoco env 跑 `eval/plot_run.py --latest` 出三联图 PNG |
+
+## MuJoCo 引擎（Sim2Sim，P1~P3 已实施 2026-11-05）
+
+设计稿：`Shared/WBR/docs/02-规划与技术路线/WBR_Sim2Sim_MuJoCo控制台_设计与实施.md`。运行核在
+`../sim2sim_mujoco/`（一核两壳：`sim_loop.py` 运行核，`run_policy.py` 批量 CLI 壳，`serve.py` 控制台壳）。
+
+- **引擎选择**：运行页左上角分段控件 `[Isaac Gym │ MuJoCo]`，只切启动面板；运行中按钮锁定；
+  停止后解锁。引擎徽标 `● ENGINE: …` 取自桥 `/api/state.engine`（Isaac 橙 / MuJoCo 青，未启动灰）。
+- **配置入口**：主导航**「MuJoCo 配置」页签**（**四轮/两轮模式选择** / 模型按维度过滤 / MJCF+sha / 场景预设 / 时长·倍速·录制·窗口 / 预检 / S0 parity 对账 / 导出图；持久化 localStorage `wbr.mj.cfg`）。原运行页快启卡已按作者要求移除，配置页签是唯一入口。
+- **引擎差异收敛在 `ENGINES` 表**（wbr_bench.py）：解释器（`WBR_PYTHON` / `WBR_PY_MUJOCO`，缺省
+  `~/miniconda3/envs/mujoco/bin/python`）、启动 argv（脚本 / `-m serve`）、LD_LIBRARY_PATH、
+  训练拦截（Isaac 拦、MuJoCo 放行——纯 CPU 可与训练并行）、preflight 分支。
+- **桥协议单一实现**：`bridge_common.py` 承载 HTTP 骨架，`bench_bridge`（Isaac）与
+  `mj_bridge`（MuJoCo）各只写自己的状态映射；协议与 2026-11-05 前逐字一致，仅新增
+  `/api/state.engine` 字段（前端对缺省值按 isaac 处理，向后兼容）。
+- **MuJoCo 运行语义**：单策略，四轮 164 维 / 两轮 161 维按配置页模式；cmd 四通道 `[in,tgt,act]`，vx 限速 0.8 m/s²、
+  h 0.15 m/s（滑条渐进）；复位＝零历史冷启动（HTTP 线程只置 flag，主循环 step 安全点执行，
+  与 play02 的 mode_shared['reset'] 同构）；无窗口也按墙钟 100 Hz 实时节律；录制 TSV 落
+  `sim2sim_mujoco/eval/runs/`，「导出图」取最新一份画三联图 PNG。
+- **槽位化（2026-11-05 接手，V0.31）**：配置页改为**槽位下拉**——① 四轮行驶 164 / ② 两轮行走 161 /
+  ③ 两轮跳跃 161 / ④ 趴下 173 / ⛓ 五槽链·两轮起步 / ⛓ 五槽链·四轮起步。每槽绑定契约＋MJCF＋默认权重＋预设＋
+  可用控制项（跳跃槽解锁「装填跳」，roll 只在两轮槽可用）。链模式 `spec.wmode="uni"`：`serve.py` 建
+  `deploy/uni_chain.py` 的 `UniChain`，桥 `/api/state` 增 `chain/slot/phase/marks/canJump`，运行页控制台下方出
+  **链时序条**（每槽事件：时间/z/终止原因）；链预检 `_preflight_mujoco_chain()` 逐份核对四槽权重维度与 MJCF sha。
+  **两轮起步链已验证 9.6 s 零终止；四轮起步链的 P7T 起立在 MuJoCo 未收口**（预检给 warn）。
+- **复杂地形（demo，2026-11-06）**：MuJoCo 配置页选「⛓ 五槽链」后多出「复杂地形（demo）」勾选，
+  `spec.terrain` → `UniChain(terrain=True)` → `wbr_v2_demo.xml`（`wbr_p8_demo.npz` 四象限：波浪/斜坡/
+  减速带/台阶/断开平台，中央十字走廊平地，地面浅色）。出生点＝中央十字走廊交点、初速 0、
+  roll ±0.2、height 0.20~0.35、跳跃高度 0.05~0.15 均可调（跳跃高度在**行走时**预设，装填跳时才下发；
+  通道可用性由后端 `cmdRanges` 表达——MuJoCo 下**不要**再用 `S.mode` 判「仅 TWOW 可跳」，
+  桥不返回 `modeKey` 会让滑条永远置灰）。两轮默认站立高度 **0.25**。
+  **链启动一律静止（vx=0）**，运行中滑条生效；**默认勾选复杂地形**（可取消）。两轮行走（P8W7）实测 vx 0.295、零终止；
+  **跳跃策略 P8J3d 在起伏地形未验证** ⇒ 预检给 warn、自动播放链跳过 JUMP 槽、交互模式装填跳回执提示
+  「建议到中央走廊平地再跳」。地形模式跳完**原地交还行走网**（不瞬移回出生点）。
+
+- **面板控制器 A+B（2026-11-06）**：五槽链改**事件驱动**——槽位停住等面板指令，按钮
+  `起立/趴下/装填跳/回两轮/回四轮/复位/切槽` 按守卫表动态解禁并真正下发；
+  运行页出指令回执条（接受/拒绝＋原因、可下指令清单、事件时序）。过渡请求先过**站定门**
+  （|vx|≤0.08 且 |pitch|≤5.7° 连续 8 拍，超时 1.5 s），避免任意时刻立刻切网导致策略吃分布外输入翻倒。
+  起立按钮在 MuJoCo 未收口 ⇒ 明确拒绝并回显原因，不阻塞其它槽。CLI 自动播放保持原行为、产物可复现。
+
+- **停止/响应优化（2026-11-06）**：MuJoCo 侧 stop 走桥的 `loop.stop_requested` 确定性通道
+  （主循环下一拍退出并 flush），不再单靠 SIGINT；实测 **21 s → 0.2 s**。`serve.py` 入口限
+  `OMP/MKL/torch` 单线程（小网络推理拉满 9 线程会占 700%+ CPU 并拖慢主线程）；
+  `tick()` 节律基准独立于 `reset()`（此前 reset 后目标时刻错乱导致空转 856% CPU）。
+  链回执条 `#mjChainBar` 固定高度＋内部滚动、`renderStatus` 内容签名、`onViewportResize` 忽略
+  <8 px 变化并防抖到 600 ms ⇒ 按钮说明不再让卡片高度跳变、原生窗口不再被反复重贴。
+
+- **两轮模式（任务③，2026-11-05，已被上面的槽位化取代为子集）**：配置页分段控件 `[四轮 164 │ 两轮 161]`——契约（`deploy_contract{_two}.json`）、
+  模型列表（按 obs 过滤）、MJCF（wbr_v2/wbr_v1）、预设（两轮站定 0.275/走 0.3/走 0.6/转向 0.5/高度 0.20/0.35）、
+  高度量程（0.175–0.245 → 0.20–0.35）随模式切换；两轮 Roll 指令 ±0.2 解锁（四轮仍置灰）。
+  **契约透传**：前端把 `contract` 写进 spec → `_preflight_mujoco` 按 spec 契约对账（obs 维度不符报
+  「不是两轮/四轮 N 维策略」）→ `serve.py` 按契约加载（相对路径按仓根解析）；spec 缺 contract 字段回退四轮
+  （向后兼容旧 spec）。preflight 端口探测补 SO_REUSEADDR（与真桥 ThreadingHTTPServer 同语义，
+  修掉上一场仿真收尾后 TIME_WAIT 误报「端口被占用」）。
+- **置灰矩阵（设计稿 §3）**：静态 `data-mj-locked`/`data-mj-why` 标记 + 一个 capture 委托点击
+  守卫 + 一个键盘守卫（M/H/U/O/J/L），CSS `body.engine-mujoco` 统一置灰外观；置灰不隐藏。
+  滑块量程走既有 cmdRanges 动态机制（Height 自动收窄 0.175–0.245，Roll/Jump 量程退化自动置灰）。
+- **已知限制**：① 桥的 400（如 jump_height）经后端代理表现为 `bridgeDown`——前端置灰挡住不会发；
+  ② 录制行在内存累积，超长会话（小时级）注意内存；③ ~~MuJoCo 遥测列名与 play02 不同，绘图页不接~~ → **2026-11-06 已接**：serve 落 `wbr_tel_mj_*.tsv`（plot02 口径），绘图页两引擎通用；Isaac 关节面板缺列留空。
+
+### 实测（2026-11-05，P1~P3 验收）
+
+- 门 1：`run_parity` 7 场景 ALL PASS（obs 1.3e-7 / act 9.5e-7 / τ 1.2e-7）；重构后 run_policy 与旧版
+  同参数输出**逐字节一致**（slew 关闭批量模式）。
+- 门 2：bench_bridge 换骨架前后 16 条协议采样（含 400/404 语义）diff 零差异，仅 engine 字段新增。
+- 门 3：preflight(isaac)×3 spec + build_launch(isaac) argv/env 快照全一致。
+- 门 4：五槽链检 `wbr_chain_check.py --scenario WBR统一五槽_P8` **ALL PASS**（起立 4.84s、
+  三档跳 60.0/82.7/86.4 mm、行走 act 0.4、趴下 3.16s——与 11-05 基线逐项复现）。
+- MuJoCo e2e（API + 浏览器 UI 双通道）：启动→`● ENGINE: MuJoCo`→滑条驱动（vx 0.3 → 稳态 0.262 m/s，
+  与 S1 口径一致）→复位零历史重走→急停→落盘 TSV+summary→停止解锁切回 Isaac。
+- 停靠回归：MuJoCo 窗口（GLFW 标题 `MuJoCo : wbr_v2`）`/api/window` found、dock/undock/reset 全通
+  ——根因是 `xwin.status/_status/undock` 默认匹配写死 `"isaac gym"`，已改为随 `_DEFAULT_MATCH`（引擎）。
+- **停靠稳定性加固（作者反馈「不太稳定」后）**：① `xwin.dock()` 改回**实测几何**（窗口 id 在手直接
+  `_attrs`，避开 11-04 的 find_window 瞬态误判）→ 前端自校正复活；② 自校正只认 <200px 小偏差为
+  换算误差（实测 MuJoCo 新窗会被 mutter 初始放置覆盖，大偏差纠不得，交给看门狗）；③ 前端**停靠保持
+  看门狗**：DOCK.on 期间每 3 s 比对实测几何，漂移 >8px 静默重贴（实测挪窗 1 s 内回位）；④ 贴前等
+  连续两拍几何一致（避开 viewer 初始化挪窗期）；⑤ 仿真自行退出（如 MuJoCo 终止判定摔倒→窗口消失）
+  前端拉尾日志 toast 一行原因，不再无声。
+- **已知行为（待作者裁决）**：MuJoCo 下「站定 0.19」预设（vx=0）用 P7F3e@11800 会缓慢倒下触发终止
+  判定，进程退出→窗口消失（此前烟测均为行走 vx≥0.3 未踩到）；站不住是策略/工作点问题非控制台问题，
+  暂用「走 0.3」等预设验证停靠。
+- 烟测中修掉的三个真 bug：spec.mode 语义撞名导致零动作（policy 不加载）、无窗口时缺实时节律
+  （13 倍速狂奔）、复位跨线程竞态+节律基准未重置。
+
+### 实测（2026-11-05 晚，两轮模式验收，[Ubuntu/zcode] 任务③）
+
+- manifest 双契约：four 164 / two 161，parity_two 六场景 PASS（stand/walk03/walk06/yaw05/h020/h035）。
+- 预检三例：两轮 spec（wbr_v1 sha 75823356 + P8W7@2800 obs 161 ✓）；四轮 spec 无 contract 字段回退默认 ✓；
+  两轮契约×四轮权重 → 「obs 164 与契约 161 不符——不是两轮 161 维策略」✓。
+- e2e（API 直测）：两轮 vx0.3 走 6 s（mean vx 0.283、z 0.272 vs 指令 0.275、无终止）；两轮 roll 指令 0.1
+  （mean roll 0.0967 跟随、无终止）；四轮回归 vx0.3@h0.19（mean vx 0.317、无终止）。
+- 连续起仿暴露 preflight 端口探测误报：真桥 ThreadingHTTPServer 自带 SO_REUSEADDR，探测裸 bind 没有
+  → TIME_WAIT 残留误报「桥端口被占用」；探测已补同语义 socket option。
+- **协作教训**：并行会话（任务②）同刻重启控制台产生 8771 重复实例（web 端口顺延撞上默认桥端口）。
+  控制台只允许一个实例（8770）；重启前先 `ss -tlnp | grep 8770` 确认，或直接 POST /api/stop 后复用。
 
 ## 实测记录（2026-10-25，旧目录 wbr_bench）
 

@@ -1,0 +1,146 @@
+{
+ "task": "wbr_flat",
+ "mode": "two_wheel",
+ "with_4w": false,
+ "asset_urdf": "{LEGGED_GYM_ROOT_DIR}/resources/robots/wbr/urdf/wbr_v1.urdf",
+ "mjcf": "legged_gym/scripts/sim2sim_mujoco/assets/mjcf/wbr_v1.xml",
+ "obs_dim": 161,
+ "act_dim": 6,
+ "dof_dim": 6,
+ "dof_names": [
+  "left_hip_joint",
+  "left_knee_joint",
+  "left_wheel_joint",
+  "right_hip_joint",
+  "right_knee_joint",
+  "right_wheel_joint"
+ ],
+ "action_dof_names": [
+  "left_hip_joint",
+  "left_knee_joint",
+  "left_wheel_joint",
+  "right_hip_joint",
+  "right_knee_joint",
+  "right_wheel_joint"
+ ],
+ "default_dof_pos": [
+  1.0,
+  -2.1,
+  0.0,
+  -1.0,
+  2.1,
+  0.0
+ ],
+ "kps": [
+  20.0,
+  40.0,
+  0.4,
+  20.0,
+  40.0,
+  0.4
+ ],
+ "kds": [
+  1.2,
+  1.2,
+  0.005001,
+  1.2,
+  1.2,
+  0.005001
+ ],
+ "torque_limits": [
+  23.7,
+  23.7,
+  23.7,
+  23.7,
+  23.7,
+  23.7
+ ],
+ "leg_action_scale": 0.5,
+ "wheel_action_scale": 3.0,
+ "wheel_accel_filter_alpha": 0.8,
+ "wheel_target_accel_limit": 0.0,
+ "clip_actions": 5.0,
+ "clip_obs": 100.0,
+ "obs_scales": {
+  "lin_vel": 2.0,
+  "ang_vel": 0.25,
+  "dof_pos": 1.0,
+  "dof_vel": 0.05,
+  "joint_state_history": 0.25,
+  "yaw_command": 1.0,
+  "roll_command": 4.0,
+  "height_measurements": 5.0
+ },
+ "history_length": 10,
+ "yaw_sign": -1.0,
+ "command_ranges": {
+  "ang_roll": [
+   -0.2,
+   0.2
+  ],
+  "ang_vel_yaw": [
+   -0.8,
+   0.8
+  ],
+  "base_height": [
+   0.2,
+   0.35
+  ],
+  "heading": [
+   0,
+   0
+  ],
+  "jump_height": [
+   0.05,
+   0.15
+  ],
+  "lin_vel_x": [
+   -1.1,
+   1.1
+  ],
+  "lin_vel_y": [
+   0.0,
+   0.0
+  ]
+ },
+ "height_mid": 0.275,
+ "height_half": 0.075,
+ "jump_hi": 0.15,
+ "dt_physics": 0.005,
+ "decimation": 2,
+ "control_dt": 0.01,
+ "initial_root_pos": [
+  0.0,
+  0.0,
+  0.28
+ ],
+ "obs_layout": {
+  "0:33": "base（与四轮同构：lin/ang/gravity/cmd×3/jump/aux h+roll/dof_err/dof_vel/last_action）",
+  "33:153": "dof_pos_err_history(10x6)+dof_vel_history(10x6)，轮误差清零、滞后一拍",
+  "153:159": "phase one-hot 6（两轮行走回合 ph=0）",
+  "159": "off_knee（不跳=0）",
+  "160": "air progress（不跳=0）",
+  "注": "161＝四轮 164 去掉尾块（caster 2＋tip 1）；v1 资产无从动轮",
+  "高度归一": "(h−0.275)/0.075，无 0.05 地板（wbr_flat 无 max(半宽,0.05)）"
+ },
+ "sources": {
+  "release": "releases/P8W7_push01_fric05",
+  "release_model": "model_2800.pt",
+  "urdf_sha256": "6bf0d843773e96f179b21ccaf31bf18f8159baa63c52a6596e6ad8f8f602b3ea",
+  "mjcf_sha256": "75823356963749a54830af2d5d4bab977170c50eab9f8e1dec085b9ad9279297",
+  "static_golden": "eval/golden/isaac_static_two.json",
+  "code_constant_origin": "legged_robot_config.py / wbr_flat_config.py / wbr_flat.py"
+ },
+ "jump_off_limit": 1.2,
+ "off_knee_const": -0.1,
+ "off_hip_const": 0.0,
+ "jump_template": true,
+ "knee_limits": [
+  -2.7053,
+  -0.1
+ ],
+ "hip_limits": [
+  -1.5708,
+  1.5708
+ ]
+}

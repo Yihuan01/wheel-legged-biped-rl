@@ -78,6 +78,7 @@ class LeggedRobotCfg(BaseConfig):
             color_low = [0.20, 0.30, 0.55]
             color_mid = [0.35, 0.62, 0.40]
             color_high = [0.95, 0.82, 0.35]
+            redraw_every = 1     # 每 N 个控制步重画一次（线段在两次重画之间保留；加密网格后控制开销用）
             env_id = 0
 
     class commands:
@@ -202,6 +203,12 @@ class LeggedRobotCfg(BaseConfig):
         light_intensity = [0.35, 0.35, 0.35]
         light_ambient = [1.0, 1.0, 1.0]
         light_direction = [-0.42, 0.42, -0.78]   # 仰角约 51°，阴影变短
+        # 【2026-11-01】第二盏方向光（低角度反侧补光，勾凹凸立体感）。None = 不设（保持现状）。
+        #   ambient/直射对比才是立体感来源：ambient 满档（1.0）会把明暗差洗平（P8 可读性调研结论）。
+        #   注意每盏灯的 ambient 是相加的 ⇒ 补光灯的 ambient 默认 0，不抬整体亮度。
+        light2_intensity = None
+        light2_ambient = [0.0, 0.0, 0.0]
+        light2_direction = [0.5, -0.6, -0.35]
 
     class sim:
         dt =  0.005

@@ -42,6 +42,26 @@ def default_cfg():
         "hcmd": 0.28,           # 交接后两轮体高指令 = R81 原生站高（用 0.22 会矮 70 mm，
                                 #   跳跃预蹲目标反而高于站高、蹲量被夹到 0）
         "hcmd_hold": 3.0,       # 交接后 hcmd 保持窗（秒）
+        # ---- 【P7T2 回灌 2026-11-06】甩+接剖面（MuJoCo deploy/p7t2_platform_standup.py 第五轮终版）----
+        #   lift_profile='p7t2' 时 SUB_LIFT 不再恒力矩 C：后仰侧重力补偿随 pitch 衰减（防过零角速度
+        #   失控——MJ 恒力矩版 rate 8 rad/s 失控教训），过零后切纯阻尼吸角速度（kp=0 防再加速）；
+        #   交棒判据换「前倾侧进带驻留 1s」（后仰侧交棒 W3 进 38° 倒退极限环——MJ 实测）。
+        "lift_profile": "p7t2",    # **默认 p7t2（2026-11-06 泄漏修复后定）**：恒力矩 C＋pitch 事件交棒，
+                                  #   控制台链验收 3/3。'p7t2'=C 淡出甩＋阻尼接＋带内驻留（v6）：
+                                  #   立即接管语境（check_chain_script，R81 马上接手）ALL PASS 且
+                                  #   ③ z 0.283 全站起；但控制台「交棒→停稳门→切网」窗口 0/3 塌
+                                  #   （DONE 阻尼保持也压不住前栽）——等门窗口与带内停稳交棒不相容，
+                                  #   翻默认需先改链路时序（交棒即切网），见当日进展日志。
+        "fade_pitch": 0.17,       # C 平滑淡出区间（rad）：>0.17 全额 C（穿从动轮拖地钉死区），→0 纯接
+        "grav_c": 0.4,            # 带回偏置 c·sign(pitch)（±0.4 N·m，pitch≈0 时防漂出带）
+        "kd2": 3.0,               # 阻尼增益（全程叠加；v5 扫描定值）
+        "t_lift_max_p7t2": 1.2,   # p7t2 保险丝（v6 定值：1.2s 交棒 vx −0.39 后向溜＝停稳门兼容方向，
+                                  #   R81 接手 z 0.283 全站起；const 仍用 t_lift_max=1.2）
+        "k_roll": 0.0,            # 滚转差动增益（默认关；MJ 用 2.5，Isaac 链 10-28 无差动通过）
+        "band_pitch_tol": 0.10,   # 交棒姿态带 ±5.7°（甩接须真正收敛 W3 才接得住）
+        "band_rate_tol": 0.5,     # 交棒角速度闸（rad/s；Isaac 姿态响应慢可能要放宽——待链测记账）
+        "band_dwell": 1.0,        # 连续驻留时长（s；band 按时间计，跨 dt 可移植）
+        "band_front_max": 0.02,   # 交棒带只在前倾侧（pitch≤0.02）
     }
 
 
@@ -87,13 +107,19 @@ class RiseScript:
         self.sub[env_ids] = SUB_HOLD
         self.t_sub[env_ids] = 0.0
         self.boosted[env_ids] = False
+        self._band_t = torch.zeros(self.n, device=self.device)   # 【P7T2】交棒带连续驻留计时
 
     # ------------------------------------------------------------------ 单步
-    def step(self, pitch, z, dt, pose_4w=None):
+    def step(self, pitch, z, dt, pose_4w=None, rate=None, roll=None):
+        """rate：d(pitch)/dt（[n]；Isaac 侧 = −base_ang_vel[:,1]，与 MJ `−ang_b[1]` 同源）。
+        roll：机体滚转 asin(−pg_y)（[n]，与 MJ 同式）。两者仅 lift_profile='p7t2' 消费，
+        缺省按 0 处理（const 路径与旧调用逐位兼容）。"""
         c = self.cfg
         n, dev = self.n, self.device
         pitch = pitch.to(dev).reshape(-1)
         z = z.to(dev).reshape(-1)
+        rate = torch.zeros_like(pitch) if rate is None else rate.to(dev).reshape(-1)
+        roll = torch.zeros_like(pitch) if roll is None else roll.to(dev).reshape(-1)
         p4 = self._vec(pose_4w, None) if pose_4w is not None else self.pose_4w
         if p4 is None:
             raise ValueError("RiseScript.step 需要 pose_4w（4W 默认腿姿）")
@@ -127,12 +153,24 @@ class RiseScript:
         # ⑤→DONE：pitch 事件（p_g 越 −15°）优先，定时保险丝兜底
         #   口径照 harness：pb = −body_pitch（正=后仰）；pb > pitch_handover(默认 −0.26 rad ≈ −15°) 即交接。
         if str(c["advance"]) == "pitch":
-            pb = -pitch
-            ph_ok = pb > float(c["pitch_handover"])
-            zh = c.get("z_handover_min", None)
-            if zh is not None:
-                ph_ok = ph_ok & (z > float(zh))
-            lift_done = ph_ok | (t_after >= c["t_lift_max"])
+            if str(c.get("lift_profile", "const")) == "p7t2":
+                # 【P7T2 交棒判据】前倾侧进带驻留：|pitch|≤±5.7° ∧ |rate|≤0.5 ∧ pitch≤前倾侧
+                #   连续 band_dwell 秒 → DONE；t_lift_max 保险丝兜底。带计时只累计 LIFT 段。
+                in_band = ((pitch.abs() <= float(c["band_pitch_tol"]))
+                           & (rate.abs() <= float(c["band_rate_tol"]))
+                           & (pitch <= float(c["band_front_max"])))
+                self._band_t = torch.where((s == SUB_LIFT) & in_band,
+                                           self._band_t + dt, torch.zeros_like(self._band_t))
+                _fuse = float(c.get("t_lift_max_p7t2", c["t_lift_max"]))
+                lift_done = ((self._band_t >= float(c["band_dwell"])) & (s == SUB_LIFT)) \
+                    | (t_after >= _fuse)
+            else:
+                pb = -pitch
+                ph_ok = pb > float(c["pitch_handover"])
+                zh = c.get("z_handover_min", None)
+                if zh is not None:
+                    ph_ok = ph_ok & (z > float(zh))
+                lift_done = ph_ok | (t_after >= c["t_lift_max"])
         else:
             lift_done = (t_after >= c["t_lift_max"])
         a5 = (s == SUB_LIFT) & lift_done
@@ -167,14 +205,44 @@ class RiseScript:
         ext_tgt = (1.0 - al).unsqueeze(1) * self.crouch.unsqueeze(0) + al.unsqueeze(1) * self.pose_2w.unsqueeze(0)
         pose = torch.where(m.unsqueeze(1), ext_tgt, pose)
         gm = torch.where(m, torch.full_like(gm, float(c["boost"])), gm)
-        # ⑤ 抬升：2W 姿态 + 恒力矩
+        # ⑤ 抬升：2W 姿态 + 力矩剖面（const=恒力矩 C；p7t2=重力补偿衰减+过零纯阻尼）
         m = (s == SUB_LIFT)
         pose = torch.where(m.unsqueeze(1), self.pose_2w.unsqueeze(0).expand(n, -1), pose)
         gm = torch.where(m, torch.full_like(gm, float(c["boost"])), gm)
-        wt = torch.where(m.unsqueeze(1), torch.full_like(wt, float(c["torque"])), wt)
+        if str(c.get("lift_profile", "const")) == "p7t2":
+            # 【Isaac 适配 v4（2026-11-06 链测四枪定案）】
+            #   实测：① Isaac 的「甩」由 EXTEND 腿推完成——LIFT 入口机体已在 ±100~300°/s 的
+            #     前摆/回弹中，MJ 的准静态慢伸入口不存在；
+            #   ② 后仰 ~25° 姿态从动轮拖地把俯仰钉死：2.2/2.3/2.55 N·m 三档力矩纹丝不动
+            #     （MJ 的 grav+c 温柔甩、净前倾 0.4 N·m 在 Isaac 没有可行窗口）；
+            #   ③ v3 的 bang-bang（后仰 C=8 ↔ 过零阻尼，分支不连续 ~10 N·m）在 crossover
+            #     附近抖振：pitch 1.8°↔18.6° 来回弹，驻留计不满、保险丝交棒（rate −101°/s）。
+            #   ⇒ v4：**C 平滑淡出**——wt = C·clip(pitch/fade_pitch,0,1) + kd2·rate + c·sign(pitch)，
+            #     高后仰全额 C（顶开从动轮完成甩），pitch→0 平滑衰减到纯「阻尼接＋带回」，
+            #     消除分支不连续；交棒判据=前倾侧进带驻留 band_dwell 秒。限幅 ±torque（=8）。
+            fade = torch.clamp(pitch / max(float(c["fade_pitch"]), 1e-6), 0.0, 1.0)
+            damp = float(c["kd2"]) * rate + float(c["grav_c"]) * torch.sign(pitch)
+            wt_base = float(c["torque"]) * fade + damp
+            wt_base = torch.clamp(wt_base, -float(c["torque"]), float(c["torque"]))
+            kr = float(c.get("k_roll", 0.0))
+            if kr != 0.0:
+                # 【滚转差动】MJ: u_l = u + k·roll；Isaac 力矩符号反 ⇒ 差动项同反。
+                #   roll>0（左倾）⇒ 左轮减力右轮加力（物理上把机身滚回来，与 MJ 同效）。
+                _wt_p = torch.stack([wt_base - kr * roll, wt_base + kr * roll], dim=1)
+            else:
+                _wt_p = wt_base.unsqueeze(1).expand(n, 2)
+            # ⚠ 只在 LIFT 帧生效，**其余帧必须清零**——2026-11-06 控制台链 0/3 塌的根因即此处
+            #   误写 `torch.where(m, wt, wt)`（恒等）导致剖面力矩泄漏进 HOLD/CROUCH/EXTEND。
+            wt = torch.where(m.unsqueeze(1), _wt_p, torch.zeros_like(wt))
+        else:
+            wt = torch.where(m.unsqueeze(1), torch.full_like(wt, float(c["torque"])), wt)
         # 完成段：保持 2W 姿态、零轮力矩（上层已切两轮）
         m = (s == SUB_DONE)
         pose = torch.where(m.unsqueeze(1), self.pose_2w.unsqueeze(0).expand(n, -1), pose)
+        if str(c.get("lift_profile", "const")) == "p7t2":
+            _done_wt = torch.clamp(float(c["kd2"]) * rate + float(c["grav_c"]) * torch.sign(pitch),
+                                   -float(c["torque"]), float(c["torque"]))
+            wt = torch.where(m.unsqueeze(1), _done_wt.unsqueeze(1).expand(n, 2), wt)
 
         return {
             "pose": pose,

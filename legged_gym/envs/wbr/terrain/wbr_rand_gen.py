@@ -28,8 +28,12 @@ NUM_COLS = 6           # 列数（独立随机种子）↔ cfg.terrain.num_cols
 KERNEL = 0.6           # 起伏颗粒度 [m]：自相关半高宽的目标尺度
                        #   0.6 m 约轮径 0.16 m 的 3.7 倍：再小起伏会碎成小台阶。
 STEP_M = V_SCALE       # 高度量化步长 [m] = vertical_scale（两者必须一致）
-SLOPE_CAP_DEG = 10.0   # 起伏坡度上限：与"缓坡衔接、无垂直断崖"同口径
+SLOPE_CAP_DEG = 10.0   # 起伏坡度上限（默认档）：与"缓坡衔接、无垂直断崖"同口径
 SLOPE_CAP = float(np.tan(np.radians(SLOPE_CAP_DEG)))
+# 分档坡度上限（P8W6 2026-10-31 阶梯真实化）：幅度要在 0.6 m 颗粒的半宽（0.3 m）内
+# 打满标称，所需坡度 ≈ atan(amp/0.3)。行 1/2 在 10° 下实测已能打满标称，维持不变；
+# 行 3（±8 cm 需 ~15°）在 10° 下被截断+回收被拒，实测只剩 85%（6.8 cm）⇒ 放到 15°。
+ROW_SLOPE_CAP_DEG = {1: 10.0, 2: 10.0, 3: 15.0}
 
 # 行 → 峰谷半幅 [m]，一张图含完整难度阶梯，由课程（走得远 ⇒ 升档）往上爬：
 #   行 0 平地 / 行 1 ±2 cm / 行 2 ±4 cm / 行 3 ±8 cm。
@@ -42,12 +46,12 @@ SPAWN_PLATFORM = 3.0   # [m] 出生平台边长
 SPAWN_FADE = 0.6       # [m] 平台到起伏区的过渡带（格长缩短后同步收窄）
 
 
-def _smooth_noise(rng, nrow, ncol, amp, k_px):
+def _smooth_noise(rng, nrow, ncol, amp, k_px, cap_deg=SLOPE_CAP_DEG):
     """生成满足三个约束的二维起伏：
 
     1. **幅度**恰好打满 ±amp（生成后归一化，避免随机采样的偶然不足）；
     2. **空间尺度**由 `k_px` 决定（高斯核平滑白噪声，核宽即自相关长度）；
-    3. **坡度**处处 <= SLOPE_CAP（按坡度上限做软截断 + 再平滑）。
+    3. **坡度**处处 <= cap_deg（按坡度上限做软截断 + 再平滑）。
 
     与 isaacgym 的 `random_uniform_terrain`（下采样 + 样条插值）不同，这里用
     高斯平滑白噪声：平滑后的场天然各向同性、无方向性，且尺度参数有明确物理含义。
@@ -69,8 +73,8 @@ def _smooth_noise(rng, nrow, ncol, amp, k_px):
     if m > 1e-12:
         sm = sm / m * amp
 
-    # 3) 坡度软截断：反复压制超限的相邻差，直到处处守 SLOPE_CAP
-    cap = SLOPE_CAP * H_SCALE
+    # 3) 坡度软截断：反复压制超限的相邻差，直到处处守 cap
+    cap = float(np.tan(np.radians(cap_deg))) * H_SCALE
     for _ in range(30):
         over = 0
         for axis in (0, 1):
@@ -104,20 +108,23 @@ def _smooth_noise(rng, nrow, ncol, amp, k_px):
     return sm
 
 
-def _quantize_guard(z, amp):
+def _quantize_guard(z, amp, lim=2):
     """量化到高度图整数单位，并**在量化后**再压一次单格跳变。
 
-    为什么需要：量化本身会引入"每格跳 STEP_M"的伪台阶。连续域里坡度合格
-    （例如 ±2 cm 档 3.2°）时，5 mm 量化步长仍会在个别相邻格造成 1~1.5 cm 的跳变，
-    剖面看上去是"积木阶梯"。这里在**整数域**上做最后的局部平滑，保证相邻像素差
-    <= 2 个量化步（2 mm 步长下 = 4 mm，对应坡度 2.3°，远低于 10° 上限）。
+    为什么需要：量化本身会引入"每格跳 STEP_M"的伪台阶。连续域里坡度合格时，
+    粗量化步长仍会在个别相邻格造成超坡度的跳变，剖面看上去是"积木阶梯"。
+    这里在**整数域**上做最后的局部平滑，保证相邻像素差 <= lim 个量化步。
+
+    【P8W6 2026-10-31】lim 改为**逐行自适应**（调用方按传入值）：取"该行连续场
+    自身最大像素步 + 1 个量化步"（只削量化伪台阶、不削场本身的坡度），并以该档
+    坡度上限对应值为天花板。此前固定 lim=2（4 mm/px ≈ 2.3°）会把行 3 连续场里
+    6°+ 的真实坡度一并压平，实测把 ±8 cm 档吃到 6.8 cm（85%）。
 
     ⚠ 平移必须**对称**：用 `(fix + 1) // 2` / `fix // 2` 这类整除在 fix 为奇数时
     一侧减 1、另一侧加 0，每次迭代整体下移，实测把整行推到限幅值（58°/160 mm 断崖）。
     这里改成先对半取整、左右用同一幅度，并把余数交替分配，保证总量守恒。
     """
     q = np.round(z / STEP_M).astype(np.int64)
-    lim = 2                                 # 相邻格最多差 2 个量化步
     for _ in range(400):
         changed = False
         for axis in (0, 1):
@@ -196,12 +203,25 @@ def build(seed=0):
     # 逐行生成：每行一个幅度，行内沿 y 连续（跨列无缝）
     for r in range(1, NUM_ROWS):
         amp = ROW_AMP[r]
-        band = _smooth_noise(rng, nrow, NUM_COLS * ncol, amp, k_px)
-        # 量化 + 单格跳变压制（整行一起做，行内跨列保持连续）
-        q = _quantize_guard(band, amp)
+        band = _smooth_noise(rng, nrow, NUM_COLS * ncol, amp, k_px,
+                             cap_deg=ROW_SLOPE_CAP_DEG.get(r, SLOPE_CAP_DEG))
         # ⚠ 出生平台必须在量化平滑之后再强制压平一次：
         #   _quantize_guard 的局部平滑会把平台边缘的起伏带进平台内部、让机器人在出生点就歪着。
         w = _spawn_mask(nrow, ncol)
+        w_row = np.tile(w, (1, NUM_COLS))          # 每格入口端都有平台 ⇒ 掩蔽整行平铺
+        # 【P8W6 2026-10-31 阶梯真实化】按**可行走区域**（掩蔽后）重新归一化到 ±amp：
+        #   平台+过渡带占每格 3.6/5 m，随机场的最高峰常落在被抹零的带里，
+        #   实测把行 2 的可用幅度从 4.0 cm 吃到 2.4 cm（60%）。机器只走掩蔽外的区域，
+        #   所以"标称 ±amp"应该指掩蔽后的场，而不是整行原始场。
+        m = np.abs(band * w_row).max()
+        if m > 1e-12:
+            band = band / m * amp
+        # 量化 + 单格跳变压制（整行一起做，行内跨列保持连续）。
+        # lim 逐行自适应：连续场最大像素步 +1 个量化步，上限=该档坡度对应值（见 _quantize_guard）。
+        cap_deg = ROW_SLOPE_CAP_DEG.get(r, SLOPE_CAP_DEG)
+        lim = int(np.ceil(_max_step(band) / STEP_M)) + 1
+        lim = max(2, min(lim, int(np.ceil(np.tan(np.radians(cap_deg)) * H_SCALE / STEP_M))))
+        q = _quantize_guard(band, amp, lim=lim)
         for c in range(NUM_COLS):
             seg = q[:, c * ncol: (c + 1) * ncol]
             q[:, c * ncol: (c + 1) * ncol] = np.round(seg * w).astype(np.int64)
@@ -227,6 +247,7 @@ def build(seed=0):
             "row_amp_m": {str(k): v for k, v in ROW_AMP.items()},
             "kernel_m": KERNEL, "step_m": STEP_M,
             "slope_cap_deg": SLOPE_CAP_DEG,
+            "row_slope_cap_deg": {str(k): v for k, v in ROW_SLOPE_CAP_DEG.items()},
             "spawn_platform_m": SPAWN_PLATFORM, "spawn_fade_m": SPAWN_FADE,
             # 出生平台中心（米，格内坐标）；训练侧据此算 env_origins，不能写死"格中心"
             "spawn_center_m": [SPAWN_PLATFORM / 2.0, ENV_WID / 2.0],
@@ -263,7 +284,8 @@ def main():
     print(f"       shape={hf.shape}  z={hf.min() * V_SCALE:+.3f}~{hf.max() * V_SCALE:+.3f} m")
     for r in range(NUM_ROWS):
         amp = 0.0 if r == 0 else ROW_AMP[r]
-        print(f"       row{r}: 峰谷半幅 ±{amp * 100:.0f} cm")
+        cap = ROW_SLOPE_CAP_DEG.get(r, SLOPE_CAP_DEG)
+        print(f"       row{r}: 峰谷半幅 ±{amp * 100:.0f} cm  坡度上限 {cap:.0f}°")
 
 
 if __name__ == "__main__":

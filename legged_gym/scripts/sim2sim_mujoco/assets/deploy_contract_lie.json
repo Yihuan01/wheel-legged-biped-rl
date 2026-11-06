@@ -1,0 +1,184 @@
+{
+ "task": "wbr_switch",
+ "mode": "lie_down",
+ "with_4w": true,
+ "jump_template": false,
+ "switch_tail": {
+  "num_phases": 7,
+  "ph_start": 3,
+  "task": 0,
+  "pose_2w": [
+   1.0,
+   -2.1,
+   -1.0,
+   2.1
+  ],
+  "pose_4w": [
+   0.9833,
+   -2.5589,
+   -0.9833,
+   2.5589
+  ],
+  "z2w": 0.2697,
+  "z4w": 0.19,
+  "seq": [
+   [
+    3,
+    0.3
+   ],
+   [
+    4,
+    0.5
+   ],
+   [
+    5,
+    0.3
+   ],
+   [
+    6,
+    0.4
+   ],
+   [
+    0,
+    999
+   ]
+  ]
+ },
+ "asset_urdf": "{LEGGED_GYM_ROOT_DIR}/resources/robots/wbr/urdf/wbr_v2.urdf",
+ "mjcf": "legged_gym/scripts/sim2sim_mujoco/assets/mjcf/wbr_v2.xml",
+ "mjcf_sha256": "25b4508ec93e733053f82bde83bf0981ba7fb96dd7a318d5dcaa47ab4f84704f",
+ "obs_dim": 173,
+ "act_dim": 6,
+ "dof_dim": 8,
+ "dof_names": [
+  "left_hip_joint",
+  "left_knee_joint",
+  "left_knee_caster_joint",
+  "left_wheel_joint",
+  "right_hip_joint",
+  "right_knee_joint",
+  "right_knee_caster_joint",
+  "right_wheel_joint"
+ ],
+ "action_dof_names": [
+  "left_hip_joint",
+  "left_knee_joint",
+  "right_hip_joint",
+  "right_knee_joint",
+  "left_wheel_joint",
+  "right_wheel_joint"
+ ],
+ "default_dof_pos": [
+  0.9833,
+  -2.5589,
+  0.0,
+  0.0,
+  -0.9833,
+  2.5589,
+  0.0,
+  0.0
+ ],
+ "kps": [
+  20.0,
+  40.0,
+  0.0,
+  0.4,
+  20.0,
+  40.0,
+  0.0,
+  0.4
+ ],
+ "kds": [
+  1.2,
+  1.2,
+  0.02,
+  0.005001,
+  1.2,
+  1.2,
+  0.02,
+  0.005001
+ ],
+ "torque_limits": [
+  23.7,
+  23.7,
+  1.0,
+  23.7,
+  23.7,
+  23.7,
+  1.0,
+  23.7
+ ],
+ "leg_action_scale": 0.5,
+ "wheel_action_scale": 3.0,
+ "wheel_accel_filter_alpha": 0.8,
+ "wheel_target_accel_limit": 0.0,
+ "clip_actions": 5.0,
+ "clip_obs": 100.0,
+ "obs_scales": {
+  "lin_vel": 2.0,
+  "ang_vel": 0.25,
+  "dof_pos": 1.0,
+  "dof_vel": 0.05,
+  "joint_state_history": 0.25,
+  "yaw_command": 1.0,
+  "roll_command": 4.0,
+  "height_measurements": 5.0
+ },
+ "history_length": 10,
+ "yaw_sign": -1.0,
+ "command_ranges": {
+  "ang_roll": [
+   0.0,
+   0.0
+  ],
+  "ang_vel_yaw": [
+   -1.0,
+   1.0
+  ],
+  "base_height": [
+   0.19,
+   0.19
+  ],
+  "heading": [
+   0,
+   0
+  ],
+  "jump_height": [
+   0.05,
+   0.05
+  ],
+  "lin_vel_x": [
+   -1.0,
+   1.0
+  ],
+  "lin_vel_y": [
+   0.0,
+   0.0
+  ]
+ },
+ "height_mid": 0.21,
+ "height_half": 0.05,
+ "jump_hi": 0.05,
+ "dt_physics": 0.005,
+ "decimation": 2,
+ "control_dt": 0.01,
+ "initial_root_pos": [
+  0.0,
+  0.0,
+  0.195
+ ],
+ "obs_layout": {
+  "0:164": "与四轮 164 逐位同构（含 caster/tip 尾块）",
+  "164:171": "switch 相位 one-hot 7（SP_HOLD4W..SP_ABSORB）",
+  "171": "task 符号（起立 +1 / 趴下 −1）",
+  "172": "UEP 偏差代理（机身俯仰，clamp ±1）"
+ },
+ "sources": {
+  "release": "releases/P7L_liedown",
+  "release_model": "model_300.pt",
+  "static_golden": "eval/golden/isaac_static.json",
+  "code_constant_origin": "wbr_switch_config.py / wbr_switch.py（extends WBRFlat4Cfg/WBRFlat4Mob）",
+  "note": "趴下槽从两轮站姿起步：起始瞬间从动轮离地是正常态，caster_air 终止会误杀（2026-11-06 修）；从动轮触地由 switch 相位机管"
+ },
+ "caster_required": false
+}

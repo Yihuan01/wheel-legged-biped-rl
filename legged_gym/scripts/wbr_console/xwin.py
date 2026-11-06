@@ -7,6 +7,7 @@
 
 import ctypes
 import ctypes.util
+import time
 
 _lib = ctypes.CDLL(ctypes.util.find_library("X11") or "libX11.so.6")
 
@@ -157,8 +158,18 @@ def _walk(depth=4):
     return out
 
 
-def find_window(match="isaac gym"):
-    """找标题含 match 的窗口里面积最大的那个（可视图层深度 4 内）；找不到返回 None。"""
+# 【Sim2Sim P3】停靠目标窗口名按引擎切换（isaac 默认不变；wbr_bench 起 MuJoCo 时调 set_dock_match）
+_DEFAULT_MATCH = ["isaac gym"]
+
+
+def set_dock_match(m):
+    _DEFAULT_MATCH[0] = m
+
+
+def find_window(match=None):
+    """找标题含 match 的窗口里面积最大的那个（可视图层深度 4 内）；找不到返回 None。
+    match 缺省用 _DEFAULT_MATCH（引擎相关，默认 isaac gym）。"""
+    match = match or _DEFAULT_MATCH[0]
     best, best_area = None, -1
     for w in _walk():
         nm = _name(w)
@@ -200,13 +211,79 @@ def pointer():
         return {"ok": True, "x": rx.value, "y": ry.value}
 
 
-def status(match="isaac gym"):
+def _wm_class(win):
+    """WM_CLASS 的 class 段（如 microsoft-edge / google-chrome / Gimp）。"""
+    a = _lib.XInternAtom(display(), b"WM_CLASS", False)
+    t = c_ulong(); f = c_int(); n = c_ulong(); br = c_ulong(); v = c_void_p()
+    if _lib.XGetWindowProperty(display(), win, a, 0, 65536, False, c_ulong(0),
+                               ctypes.byref(t), ctypes.byref(f), ctypes.byref(n),
+                               ctypes.byref(br), ctypes.byref(v)) != 0:
+        return ""
+    if n.value == 0 or not v.value:
+        return ""
+    raw = ctypes.string_at(v.value, n.value)          # format 8，instance\0class
+    _lib.XFree(v)
+    parts = raw.decode("utf-8", "replace").split("\x00")
+    return parts[1] if len(parts) > 1 else (parts[0] if parts else "")
+
+
+def find_by_class(match, exclude_title=None):
+    """按 WM_CLASS 子串找窗口（取面积最大）；排除标题含 exclude_title 的（如 isaac 自己）。"""
+    best, best_area = None, -1
+    for w in _walk():
+        cls = _wm_class(w)
+        if match.lower() not in cls.lower():
+            continue
+        if exclude_title and exclude_title.lower() in _name(w).lower():
+            continue
+        a = _attrs(w)
+        if not a:
+            continue
+        if a.width * a.height > best_area:
+            best, best_area = w, a.width * a.height
+    return best
+
+
+def browser_origin(match):
+    """浏览器窗口（按标题/类名子串匹配，取面积最大）左上角的 root 坐标（设备像素）。
+    供「页面基准停靠」：前端报面板在页面内的相对矩形＋DPR＋浏览器 chrome 高度，
+    后端用浏览器窗口的 X 原点合成屏幕绝对矩形——绕开多屏/分数缩放下
+    window.screenX 估算不准的问题（P8 五槽，11-04）。"""
+    w = find_window(match)
+    if not w:
+        # 标题匹配失败（浏览器窗口常无标题）⇒ 按 WM_CLASS 找
+        w = find_by_class(match.replace("edge", "microsoft-edge")
+                          .replace("chrome", "google-chrome")
+                          .replace("firefox", "Navigator"))
+    if not w:
+        return None
+    return _abs_pos(w)
+
+
+def status(match=None):
+    """浏览器窗口（标题含 match，取面积最大）左上角的 root 坐标（设备像素）。
+    供「页面基准停靠」：前端报面板在页面内的相对矩形＋DPR＋浏览器 chrome 高度，
+    后端用浏览器窗口的 X 原点合成屏幕绝对矩形——绕开多屏/分数缩放下
+    window.screenX 估算不准的问题（P8 五槽，11-04）。"""
+    w = find_window(match)
+    if not w:
+        return None
+    return _abs_pos(w)
+
+
+def status(match=None):
+    match = match or _DEFAULT_MATCH[0]
     with _lock():
+        for _ in range(3):                     # 同款瞬态失败重试
+            r = _status(match)
+            if r.get("found"):
+                return r
+            time.sleep(0.2)
         return _status(match)
 
 
-def _status(match="isaac gym"):
-    w = find_window(match)
+def _status(match=None):
+    w = find_window(match or _DEFAULT_MATCH[0])
     if not w:
         return {"found": False}
     a = _attrs(w)
@@ -291,9 +368,15 @@ def hide(win):
     _lib.XFlush(display())
 
 
-def dock(x, y, w, h, match="isaac gym", borderless=True):
+def dock(x, y, w, h, match=None, borderless=True):
+    match = match or _DEFAULT_MATCH[0]
     with _lock():
-        w_id = find_window(match)
+        w_id = None
+        for _ in range(4):                     # find_window 偶发瞬态失败（X 查询竞态）⇒ 重试
+            w_id = find_window(match)
+            if w_id:
+                break
+            time.sleep(0.3)
         if not w_id:
             return {"found": False}
         if borderless:
@@ -303,25 +386,36 @@ def dock(x, y, w, h, match="isaac gym", borderless=True):
         move_resize(w_id, x, y, w, h)
         _lib.XRaiseWindow(display(), w_id)
         _lib.XSync(display(), 0)
-        return _status(match)
+        # 【Sim2Sim】返回**实测**几何：dockWindow 的自校正拿 st.x/st.y 与目标比对，贴歪了自动重贴。
+        #   11-04 的「返回请求值」是为避开再 find_window 的瞬态误判——这里窗口 id 在手直接 _attrs，
+        #   不重复找窗，无该风险；attrs 偶尔拿不到时退回请求值（自校正退化为不动作，无害）。
+        a = _attrs(w_id)
+        if a is not None:
+            ax, ay = _abs_pos(w_id)
+            return {"found": True, "x": ax, "y": ay, "w": a.width, "h": a.height}
+        return {"found": True, "x": x, "y": y, "w": w, "h": h}
 
 
-def undock(match="isaac gym"):
+def undock(match=None):
+    match = match or _DEFAULT_MATCH[0]
+    # ⚠【P8 五槽】不能 hide()（XUnmapWindow）：对 GL/Vulkan 窗口 unmap 会摧毁渲染上下文
+    #   ⇒ 仿真变 headless、窗口从此消失（11-04 作者实测：最小化浏览器后视口消失）。
+    #   降下＝只降层级（set_above False，窗口退到后面保持映射），GL 存活；重停靠时再置顶。
     with _lock():
         w_id = find_window(match)
         if not w_id:
             return {"found": False}
         set_above(w_id, False)
-        hide(w_id)
         return _status(match)
 
 
-def rect_inside_window(x, y, w, h, min_size=120, skip_title="isaac gym"):
+def rect_inside_window(x, y, w, h, min_size=120, skip_title=None):
     """请求的矩形（设备像素）是否真的落在某个可见顶层窗口里。
 
     嵌入式面板（webview）里 window.screenX/outerWidth 读不到真值，前端会算出荒唐的坐标；
     如果那个矩形下面根本没有窗口，就说明坐标不可信。判据用矩形中心点 + 面积足够大。
     """
+    skip_title = skip_title or _DEFAULT_MATCH[0]
     cx, cy = x + w // 2, y + h // 2
     with _lock():
         d = display()

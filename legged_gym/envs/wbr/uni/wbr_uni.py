@@ -86,8 +86,12 @@ class WBRUniMob(WBRSwitchMob):
         rs = getattr(self, "_rise_script", None)
         if rs is None:
             rs = self.init_rise_script()
+        # 【P7T2 回灌】补 rate/roll 输入：rate = d(pitch)/dt = −ω_y(机体系)（与 MJ `−ang_b[1]`
+        #   同源，asin(−pg_x) 求导）；roll = asin(−pg_y)（_body_roll 与 MJ 同式）。仅
+        #   lift_profile='p7t2' 消费，const 路径忽略。
         out = rs.step(pitch=self._body_pitch(), z=self.root_states[:, 2], dt=self.dt,
-                      pose_4w=self._rise_pose_4w)
+                      pose_4w=self._rise_pose_4w,
+                      rate=-self.base_ang_vel[:, 1], roll=self._body_roll())
         # 脚本给的是绝对关节角 ⇒ 写进 default_dof_pos（PD 目标 = default + 动作）。
         # default_dof_pos 形状 [1, num_dof]、全 env 共享，只写第 0 行；写 [n, 4] 会与广播冲突。
         self.default_dof_pos[0, self.leg_dof] = out["pose"][0]

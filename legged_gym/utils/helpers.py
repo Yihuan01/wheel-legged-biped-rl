@@ -164,9 +164,10 @@ def get_args():
         {"name": "--play_mode", "type": str, "default": "single", "choices": ["single", "switch", "uni"],
          "help": "play02 启动档位：single=单策略回放(现状,含单独四轮/跳跃模型)；switch=多模式切换回放(四轮⇄起立⇄两轮站立)；uni=统一多模式程序(wbr_uni，两轮用 W12)。"},
         {"name": "--fourw_checkpoint", "type": str, "default": "releases/P7F3e_yaw1_dr15/model_11800.pt", "help": "switch 档：四轮(F3e)策略权重路径。"},
-        {"name": "--standup_checkpoint", "type": str, "default": "", "help": "switch 档：起立(P7S)策略权重路径（默认 P7S1b：能站停不滚；对称仍不足）。"},
-        {"name": "--w3_checkpoint", "type": str, "default": "", "help": "switch 档：两轮站立/行走(W3)平衡网权重路径（起立后交接目标）。"},
+        {"name": "--standup_checkpoint", "type": str, "default": "releases/P7S1b_standup/model_1300.pt", "help": "switch 档：起立(P7S)策略权重路径（默认 P7S1b：能站停不滚；对称仍不足）。"},
+        {"name": "--w3_checkpoint", "type": str, "default": "releases/W3_vlim085/model_2200.pt", "help": "switch 档：两轮站立/行走(W3)平衡网权重路径（起立后交接目标）。"},
         {"name": "--lie_checkpoint", "type": str, "default": "releases/P7L_liedown/model_300.pt", "help": "switch 档：趴下(2W→4W)策略权重路径（P7L）。"},
+        {"name": "--jump_checkpoint", "type": str, "default": "", "help": "uni 档五槽：跳跃(P8J)策略权重路径。两轮行走网常驻，跳跃事件窗（env.ph>0）内由本网接管、事件结束交还；空串=不加载（两轮无跳跃能力）。"},
 
         {"name": "--headless", "action": "store_true", "default": False, "help": "Force display off at all times"},
         {"name": "--horovod", "action": "store_true", "default": False, "help": "Use horovod for multi-gpu training"},

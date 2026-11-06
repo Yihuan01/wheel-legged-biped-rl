@@ -147,10 +147,11 @@ class LeggedRobot(BaseTask):
         self.last_root_vel[:] = self.root_states[:, 7:13]
 
         # 【2026-10-29】贴地高度着色网格（纯 viewer 可视化；`terrain.grid.enable=False` 时是空操作）
-        if self.viewer and self.enable_viewer_sync:
-            self._draw_terrain_grid()
+        # 【2026-11-01】顺序调整：debug 绘制里的 clear_lines 会擦掉先画的网格 ⇒ debug 先画、grid 后画
         if self.viewer and self.enable_viewer_sync and self.debug_viz:
             self._draw_debug_vis()
+        if self.viewer and self.enable_viewer_sync:
+            self._draw_terrain_grid()
 
     def check_termination(self):
         """ Check if environments need to be reset
@@ -819,12 +820,14 @@ class LeggedRobot(BaseTask):
         if not self._grid_on:
             return
         import numpy as np
-        from legged_gym.utils.terrain import Terrain
         s = float(getattr(cfg, "spacing", 0.5))       # 格距 [m]
         r = float(getattr(cfg, "radius", 5.0))        # 半径 [m]
         sub = float(getattr(cfg, "subdiv", 0.25))     # 每段细分 [m]：越小越贴地形
         self._grid_n = int(2 * round(r / s) + 1)
-        k = max(int(round(s / sub)), 1)
+        # 【2026-11-01 修 bug】k 是"整条线（长 2r）的分段数"，此前误写成 round(s/sub)：
+        #   s=0.5/sub=0.25 时 k=2 ⇒ 每条 12 m 线只有 2 段 6 m 直弦，中段悬空/穿模、颜色取弦中点，
+        #   这正是"起伏看不出来"的主因。正确口径：段长 ≈ subdiv ⇒ k = 2r/sub。
+        k = max(int(round(2 * r / sub)), 1)
         t = np.linspace(0.0, 1.0, k + 1)
         off = (np.arange(self._grid_n) - (self._grid_n - 1) / 2.0) * s
         segs = []
@@ -847,9 +850,11 @@ class LeggedRobot(BaseTask):
         self._grid_c2 = np.array(getattr(cfg, "color_high", [0.95, 0.82, 0.35]), dtype=np.float32)
         self._grid_last = None
         self._grid_env = int(getattr(cfg, "env_id", 0))
+        self._grid_frame = 0
+        self._grid_every = max(int(getattr(cfg, "redraw_every", 1)), 1)
 
         print(f"[grid] 贴地高度着色网格：{self._grid_n}×{self._grid_n} 线 / 格距 {s:.2f} m / "
-              f"半径 {r:.1f} m / {len(x0)} 段（仅 viewer，不影响物理）")
+              f"半径 {r:.1f} m / {len(x0)} 段 / 每 {self._grid_every} 步重画（仅 viewer，不影响物理）")
         try:
             import numpy as _np
             o = self.env_origins[self._grid_env, :2].cpu().numpy()
@@ -889,12 +894,24 @@ class LeggedRobot(BaseTask):
                 gymapi.Vec3(*li),
                 gymapi.Vec3(*getattr(self.cfg.viewer, "light_ambient", [0.55] * 3)),
                 gymapi.Vec3(*getattr(self.cfg.viewer, "light_direction", [-0.6, 0.6, -0.55])))
+            # 【2026-11-01】第二盏方向光（低角度反侧补光）：None = 不设（保持出厂）
+            li2 = getattr(self.cfg.viewer, "light2_intensity", None)
+            if li2 is not None:
+                self.gym.set_light_parameters(
+                    self.sim, 1,
+                    gymapi.Vec3(*li2),
+                    gymapi.Vec3(*getattr(self.cfg.viewer, "light2_ambient", [0.0] * 3)),
+                    gymapi.Vec3(*getattr(self.cfg.viewer, "light2_direction", [0.5, -0.6, -0.35])))
         except Exception as _e:
             print(f"[viewer] set_light_parameters 未生效：{_e}")
 
     def _draw_terrain_grid(self):
         """在 viewer 里画贴地的高度着色网格（跟随机器人）。"""
         if not getattr(self, "_grid_on", False) or self.viewer is None:
+            return
+        # 节流：线段在两次重画之间保留，加密网格（段数上千）后控制绘制开销
+        self._grid_frame += 1
+        if (self._grid_frame - 1) % self._grid_every != 0:
             return
         import numpy as np
         e = self._grid_env

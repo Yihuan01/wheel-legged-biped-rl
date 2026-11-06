@@ -1,0 +1,150 @@
+{
+ "task": "wbr_flat4",
+ "asset_urdf": "{LEGGED_GYM_ROOT_DIR}/resources/robots/wbr/urdf/wbr_v2.urdf",
+ "obs_dim": 164,
+ "act_dim": 6,
+ "dof_dim": 8,
+ "dof_names": [
+  "left_hip_joint",
+  "left_knee_joint",
+  "left_knee_caster_joint",
+  "left_wheel_joint",
+  "right_hip_joint",
+  "right_knee_joint",
+  "right_knee_caster_joint",
+  "right_wheel_joint"
+ ],
+ "action_dof_names": [
+  "left_hip_joint",
+  "left_knee_joint",
+  "right_hip_joint",
+  "right_knee_joint",
+  "left_wheel_joint",
+  "right_wheel_joint"
+ ],
+ "default_dof_pos": [
+  0.9833,
+  -2.5589,
+  0.0,
+  0.0,
+  -0.9833,
+  2.5589,
+  0.0,
+  0.0
+ ],
+ "kps": [
+  20.0,
+  40.0,
+  0.0,
+  0.4,
+  20.0,
+  40.0,
+  0.0,
+  0.4
+ ],
+ "kds": [
+  1.2,
+  1.2,
+  0.02,
+  0.005001,
+  1.2,
+  1.2,
+  0.02,
+  0.005001
+ ],
+ "torque_limits": [
+  23.7,
+  23.7,
+  1.0,
+  23.7,
+  23.7,
+  23.7,
+  1.0,
+  23.7
+ ],
+ "leg_action_scale": 0.5,
+ "wheel_action_scale": 3.0,
+ "wheel_accel_filter_alpha": 0.8,
+ "wheel_target_accel_limit": 0.0,
+ "clip_actions": 5.0,
+ "clip_obs": 100.0,
+ "obs_scales": {
+  "lin_vel": 2.0,
+  "ang_vel": 0.25,
+  "dof_pos": 1.0,
+  "dof_vel": 0.05,
+  "joint_state_history": 0.25,
+  "yaw_command": 1.0,
+  "roll_command": 4.0,
+  "height_measurements": 5.0
+ },
+ "history_length": 10,
+ "yaw_sign": -1.0,
+ "command_ranges": {
+  "ang_roll": [
+   0.0,
+   0.0
+  ],
+  "ang_vel_yaw": [
+   -1.0,
+   1.0
+  ],
+  "base_height": [
+   0.175,
+   0.245
+  ],
+  "heading": [
+   0,
+   0
+  ],
+  "jump_height": [
+   0.05,
+   0.05
+  ],
+  "lin_vel_x": [
+   -1.0,
+   1.0
+  ],
+  "lin_vel_y": [
+   0.0,
+   0.0
+  ]
+ },
+ "height_mid": 0.21,
+ "height_half": 0.05,
+ "jump_hi": 0.05,
+ "dt_physics": 0.005,
+ "decimation": 2,
+ "control_dt": 0.01,
+ "initial_root_pos": [
+  0.0,
+  0.0,
+  0.19
+ ],
+ "obs_layout": {
+  "0:3": "base_lin_vel * lin_vel",
+  "3:6": "base_ang_vel * ang_vel",
+  "6:9": "projected_gravity",
+  "9:12": "commands[0:3] * [lin,lin,ang]; [2] = yaw_sign * yaw * yaw_command",
+  "12": "jump_cmd / jump_hi",
+  "13:15": "[ (h - h_mid)/h_half , roll * roll_command ]",
+  "15:21": "dof_err[action_dof] * dof_pos (wheel err = 0)",
+  "21:27": "dof_vel[action_dof] * dof_vel",
+  "27:33": "clipped action",
+  "33:93": "dof_pos_err_history(10x6) * dof_pos * joint_state_history",
+  "93:153": "dof_vel_history(10x6) * dof_vel * joint_state_history",
+  "153:159": "phase one-hot 6",
+  "159": "off_knee / off_limit",
+  "160": "air progress (0 at phase 0)",
+  "161:163": "caster contacts [L,R]",
+  "163": "tilt margin / 0.05 clamped to [-1,1]"
+ },
+ "sources": {
+  "release": "releases/P7F3e_yaw1_dr15",
+  "release_config_sha256": "734d67674df5e4c41604ff8f1fd18687d75eca7191169189b3e490a44d096889",
+  "release_model": "model_11800.pt",
+  "git_sha": "78cb6d4",
+  "code_constant_origin": "legged_robot_config.py / wbr_flat_config.py / wbr_flat4.py"
+ },
+ "caster_required": true
+}

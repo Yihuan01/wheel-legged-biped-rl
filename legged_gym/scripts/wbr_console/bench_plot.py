@@ -91,10 +91,24 @@ def _config_from_meta(meta, name):
             items.append({"role": "task", "model": meta.get("task"), "ckpt": "", "path": ""})
     else:
         md = meta.get("model_dir", "")
-        if md:
+        if md and md != "?":
             items.append({"role": "单策略", "model": os.path.basename(md.rstrip("/")) or md,
                           "ckpt": "model_%s" % meta.get("model_iter", "?"),
                           "path": md})
+        elif meta.get("model_cli"):
+            # 【P7F4】旧录像的 model_dir 恒为 "?"（rsl_rl 1.0.2 无 model_file_path 属性）：
+            #   从 model_cli="<load_run>|<ckpt>" 兜底解析（load_run 可能是 run 目录或 .pt 路径）。
+            _p, _, _it = str(meta.get("model_cli")).partition("|")
+            _p = _p.strip()
+            if _p and _p != "?":
+                if _p.endswith(".pt") and os.path.isfile(_p):
+                    items.append({"role": "单策略", "model": os.path.basename(os.path.dirname(_p)),
+                                  "ckpt": os.path.basename(_p), "path": _p})
+                else:
+                    _it = _it.strip()
+                    items.append({"role": "单策略", "model": os.path.basename(_p.rstrip("/")) or _p,
+                                  "ckpt": ("model_%s" % _it) if _it and _it != "?" else "",
+                                  "path": _p})
         elif meta.get("task"):
             items.append({"role": "task", "model": meta.get("task"), "ckpt": "", "path": ""})
     return items

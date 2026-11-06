@@ -583,7 +583,7 @@ def _build_single(args):
         _p = _frc if os.path.isfile(_frc) else os.path.join(_frc, "config.json")
         _fill_from_json(env_cfg, _json.load(open(_p)))
         print(f"[from_run_config] 已回填 {_p} → env_cfg（复现该 run 参数；回放覆盖仍在其后生效）")
-    env_cfg.env.num_envs = 3
+    env_cfg.env.num_envs = int(getattr(args, "num_envs", None) or 3)   # 控制台传 1~3；不传=3（历史默认）
     env_cfg.env.episode_length_s = 3600
     # 【P8W1 2026-10-28】只有平地任务才缩小地形网格。`wbr_terrain` 的高度图是 4 行 ×6 列，
     #   强行改成 2×2 会让 Terrain._load_height_field 的尺寸校验报错（实测 600x600 vs 700x800），
@@ -659,8 +659,10 @@ def run_single(args):
         f"wheel_idx={','.join(str(i) for i in sorted(wheel_set))}",
         f"torque_limits={','.join(f'{v:.4f}' for v in torque_limits)}",
         f"dt={dt:.6f}",
-        "model_dir=" + str(getattr(ppo_runner, "model_file_path", "?")),
-        "model_iter=" + str(getattr(ppo_runner, "load_num_steps", "?")),
+        # 【P7F4】model_file_path/load_num_steps 属性在 rsl_rl 1.0.2 不存在（恒写 "?"），
+        #   绘图页因此解析不出模型——改用真实来源：load_run 目录 + runner 已加载的迭代号。
+        "model_dir=" + str(args.load_run if (getattr(args, "load_run", None) and os.path.isdir(str(args.load_run))) else "?"),
+        "model_iter=" + str(getattr(ppo_runner, "current_learning_iteration", None) or getattr(args, "checkpoint", "?")),
         "model_cli=" + "%s|%s" % (getattr(args, "load_run", "?"), getattr(args, "checkpoint", "?")),
         "cmd_cols=" + ",".join(short for _, short in cmd_cols),
         "ranges=" + ";".join(f"{short}:{span_of(BY_SHORT[short], getattr(env.cfg.commands.ranges, attr))[0]:.4f},"
@@ -741,7 +743,7 @@ def run_single(args):
 
             if step_counter == 1 and env.viewer is not None:
                 robot_pos = env.root_states[ROBOT, 0:3].cpu().numpy()
-                env.set_camera(robot_pos + np.array([-1.5, 1.0, 0.8]), robot_pos + np.array([0.5, 0.0, 0.0]))
+                env.set_camera(robot_pos + np.array([-1.5, 1.0, 1.34]), robot_pos + np.array([0.6, 0.0, 0.0]))
 
             step_counter += 1
             current_time += dt
@@ -852,7 +854,7 @@ def run_single(args):
 # ==============================================================================
 def _build_switch(args, task="wbr_switch"):
     env_cfg, _ = task_registry.get_cfgs(name=task)
-    env_cfg.env.num_envs = 3
+    env_cfg.env.num_envs = int(getattr(args, "num_envs", None) or 3)   # 控制台传 1~3；不传=3（历史默认）
     env_cfg.env.episode_length_s = 3600
     env_cfg.terrain.num_rows = 2
     env_cfg.terrain.num_cols = 2
@@ -879,7 +881,10 @@ def _build_switch(args, task="wbr_switch"):
     p_stand = load_actor_critic(args.standup_checkpoint, 173, dev) if getattr(args, "standup_checkpoint", "") else None
     p_w3 = load_actor_critic(args.w3_checkpoint, 161, dev)   # 两轮站立/行走平衡网（交接目标）
     p_lie = load_actor_critic(args.lie_checkpoint, 173, dev)  # 趴下（2W→4W）专用策略
-    return env, p_4w, p_stand, p_w3, p_lie
+    # 【P8 五槽】跳跃槽（事件级）：两轮行走网常驻，跳跃事件窗（env.ph>0）内由跳跃网接管。
+    #   161 维与 w3 同 perm（W3_ACT_PERM）；空串=不加载（run_switch 回落行走网，行为同旧四槽）。
+    p_jump = load_actor_critic(args.jump_checkpoint, 161, dev) if getattr(args, "jump_checkpoint", "") else None
+    return env, p_4w, p_stand, p_w3, p_lie, p_jump
 
 
 def _set_cmd_ranges(env, lo, hi):
@@ -911,7 +916,7 @@ def _set_jump_range(env, lo, hi):
 
 def run_switch(args, task="wbr_switch"):
     global readout
-    env, p_4w, p_stand, p_w3, p_lie = _build_switch(args, task)
+    env, p_4w, p_stand, p_w3, p_lie, p_jump = _build_switch(args, task)
     n = env.num_envs
     dev = env.device
     all_ids = torch.arange(n, dtype=torch.long, device=dev)
@@ -1036,8 +1041,10 @@ def run_switch(args, task="wbr_switch"):
     #   v_impact  = 落地当拍 |vz|（m/s）
     columns += ['rise_sub', 'armed', 'jump_blocked', 'ev_takeoff', 'ev_land',
                 'jump_apex', 'jump_air_s', 'v_impact']
+    # 【P8 五槽】ctrl = 本拍驱动腿/轮的策略（0=两轮行走网 1=跳跃网；事件窗=1）
+    columns += ['ctrl']
     int_cols = {'step', 'done', 'mode', 'ph', 'ev_up', 'n_ground', 'caster_off', 'dbg_ph', 'uni_ph',
-                'rise_sub', 'armed', 'jump_blocked', 'ev_takeoff', 'ev_land'}
+                'rise_sub', 'armed', 'jump_blocked', 'ev_takeoff', 'ev_land', 'ctrl'}
     formats = [('%d' if c in int_cols else '%0.4f') for c in columns]
     meta = [
         f"joints={','.join(dof_names)}",
@@ -1047,6 +1054,7 @@ def run_switch(args, task="wbr_switch"):
         f"dt={dt:.6f}", f"task={task}",
         f"4w={args.fourw_checkpoint}", f"standup={args.standup_checkpoint}",
         f"3w={args.w3_checkpoint}", f"lie={args.lie_checkpoint}",
+        f"jumpnet={getattr(args, 'jump_checkpoint', '') or '(none)'}",
         f"standup_mode={str(getattr(sw, 'standup_mode', 'p7s') or 'p7s')}",
         "ph_scheme=uni11",                       # 相位号方案：ph=原始内部值, uni_ph=统一 0-11
         f"jump={1 if uni else 0}",               # 两轮是否可跳（决定 uni_ph 是否用跳跃子相 1..5）
@@ -1098,6 +1106,7 @@ def run_switch(args, task="wbr_switch"):
     TWOW_BLEND_SEC = 0.30
     tw_leg0 = _dflt_2w[0, env.leg_dof].clone()   # 起立末腿姿态(进入两轮瞬间更新)，[4]
     tw_elapsed = TWOW_BLEND_SEC                  # 初值=完成，未进入两轮前不生效
+    jump_net_on = False                          # 【P8 五槽】跳跃网接管中（跳跃事件窗内 True）
 
     # ---- 传统起立（脚本链）状态：配方出自 2026-10-25 harness 验证（/tmp/chain.py，num_envs 1/3/6 全过）----
     #   链路：4W 静稳 → smoothstep 折蹲 → 蹲稳 → smoothstep 伸腿 2W(腿P×boost, 轮零矩)
@@ -1181,8 +1190,20 @@ def run_switch(args, task="wbr_switch"):
     print("=" * 78 + "\n")
 
     gui_cmds['base_height'] = 0.19   # switch 档初始体高取四轮工作高（面板滑块同显 0.19），四轮起始水平
+    # vx/yaw 滑条量程跟随所加载四轮模型（ckpt 同目录 config.json 的训练量程，提速线 ±1.5 / 未来 ±2.0 自动跟上；
+    # 读不到回退 ±1.0），并与两轮侧 ±1.0 取并集——否则 P7F4+ 模型在面板/控制台滑不出新量程。
+    _vx4 = _yw4 = (-1.0, 1.0)
+    try:
+        import json as _json
+        with open(os.path.join(os.path.dirname(os.path.abspath(args.fourw_checkpoint)), 'config.json')) as _f:
+            _r = _json.load(_f)['commands']['ranges']
+        _vx4 = (float(_r['lin_vel_x'][0]), float(_r['lin_vel_x'][1]))
+        _yw4 = (float(_r['ang_vel_yaw'][0]), float(_r['ang_vel_yaw'][1]))
+    except Exception:
+        pass
     start_gui_thread(env, ranges={
-        'lin_vel_x': (-1.0, 1.0), 'ang_vel_yaw': (-1.0, 1.0),
+        'lin_vel_x': (min(-1.0, _vx4[0]), max(1.0, _vx4[1])),
+        'ang_vel_yaw': (min(-1.0, _yw4[0]), max(1.0, _yw4[1])),
         # 体高/侧倾取**两套量程的并集**，否则两轮下 0.28 或 roll 会被挡在滑块外（四轮分支自己夹 [0.175,0.245]）
         'base_height': (0.175, 0.35), 'ang_roll': (-0.2, 0.2),
         'jump_height': (0.0, 0.15),
@@ -1404,6 +1425,10 @@ def run_switch(args, task="wbr_switch"):
                     trad_t += dt
 
             elif mode == MODE_TWOW:  # 两轮站立/行走：W3 平衡网，vx/yaw 可走
+                # 【P8 五槽】事件窗判定（env.ph>0＝跳跃事件窗内，跳跃网接管；判定供
+                #   in_h 夹取/量程切换/网络选择三处共用）
+                _ph_robot = int(env.ph[ROBOT].item())
+                _jump_on = bool(uni and (p_jump is not None) and _ph_robot > 0)
                 in_vx = gui_cmds['lin_vel_x']
                 in_yaw = gui_cmds['ang_vel_yaw']
                 # 无头测试钩子：到点自动装填一次跳
@@ -1418,6 +1443,12 @@ def run_switch(args, task="wbr_switch"):
                     in_h = float(getattr(sw, 'trad_hcmd', 0.28))
                 else:
                     in_h = min(max(gui_cmds['base_height'], 0.2), 0.35)   # 体高滑块生效（W3 训练量程 [0.2,0.35]）
+                # 【P8 五槽】装填待触发/事件窗：体高指令夹进 P8J 训练带 [0.24,0.30]——
+                #   跳跃触发门要求体高指令落在 [jump_cmd_h_min,jump_cmd_h_max]（P8J=0.24~0.32），
+                #   面板体高在带外时跳跃永不触发；事件窗内保持带内，避免 h 观测列出分布。
+                if p_jump is not None and (_ph_robot > 0 or (
+                        bool(env.is_armed[ROBOT].item()) and _ph_robot == 0)):
+                    in_h = min(max(in_h, 0.24), 0.30)
                 in_roll = min(max(gui_cmds['ang_roll'], -0.2), 0.2)       # 侧倾滑块生效（W3 训练量程 ±0.2）
                 env.command_targets[:, 0] = in_vx
                 env.command_targets[:, 1] = 0.0
@@ -1428,9 +1459,28 @@ def run_switch(args, task="wbr_switch"):
                 env.base_roll_targets[:] = in_roll
                 # 阶段 A：uni 每步只刷量程/默认姿态/观测，**不写相位**（否则会把跳跃机推进的 ph 按回 0）；
                 #   旧 switch 保持原行为（每步写回 SP_HOLD2W）。
+                # 【P8 五槽】事件级跳跃接管：事件窗判定在分支最前（_ph_robot 供 in_h 夹取与本段共用）。
                 _apply_mode(MODE_TWOW, ph=SP_HOLD2W, set_phase=(not uni))
+                if _jump_on:
+                    # 事件窗：obs 体高归一化量程切 P8J 训练带 [0.24,0.30]
+                    #   （_apply_mode 每拍覆写回行走带 [0.2,0.35]，故每拍在此重设）
+                    _set_cmd_ranges(env, 0.24, 0.30)
                 obs_in = _obs_for(MODE_TWOW)
-                act = _act(p_w3, obs_in)[:, W3_ACT_PERM]      # W3 序 -> wbr4 序
+                # 触发门在 env 相位机（flat4 trig，settle_gate=False ⇒ 行进跳不停稳）；
+                #   两网同构 161（obs/act 同 W3 perm）⇒ 切换零间隙；
+                #   退出沿复用 0.3s 腿目标平滑窗（tw_leg0=事件末实际腿姿态）防突跳。
+                if jump_net_on and not _jump_on:
+                    tw_leg0 = env.dof_pos[0, env.leg_dof].clone()
+                    tw_elapsed = 0.0
+                    # 一次性语义：事件结束即清跳跃指令。行走网 P8W7 从未见非零跳跃指令
+                    #   （训练 jump_command_probability=0），残留 0.1 是分布外输入 ⇒ 实测
+                    #   策略主动减速到停（11-04 TSV：0.43→0.07/1s）；滑块一并归零＝一发一跳。
+                    gui_cmds['jump_height'] = 0.0
+                    env.command_targets[:, 4] = 0.0
+                    jump_net_off_step = step_counter
+                jump_net_on = _jump_on
+                jump_net_on_prev_dbg = _jump_on
+                act = _act(p_jump if _jump_on else p_w3, obs_in)[:, W3_ACT_PERM]      # W3 序 -> wbr4 序
                 # 腿目标平滑并入：alpha 0→1 把腿 PD 目标从起立末姿态缓到 W3 目标（轮仍由 W3 平衡）
                 if tw_elapsed < TWOW_BLEND_SEC:
                     alpha = min(1.0, tw_elapsed / TWOW_BLEND_SEC)
@@ -1504,7 +1554,7 @@ def run_switch(args, task="wbr_switch"):
 
             if step_counter == 1 and env.viewer is not None:
                 robot_pos = env.root_states[ROBOT, 0:3].cpu().numpy()
-                env.set_camera(robot_pos + np.array([-1.5, 1.0, 0.8]), robot_pos + np.array([0.5, 0.0, 0.0]))
+                env.set_camera(robot_pos + np.array([-1.5, 1.0, 1.34]), robot_pos + np.array([0.6, 0.0, 0.0]))
 
             step_counter += 1
             current_time += dt
@@ -1573,7 +1623,8 @@ def run_switch(args, task="wbr_switch"):
             row += [_rise_sub,
                     int(bool(env.is_armed[ROBOT].item())) if hasattr(env, 'is_armed') else 0,
                     int(bool(env.jump_gate_blocked[ROBOT].item())) if hasattr(env, 'jump_gate_blocked') else 0,
-                    ev_takeoff, ev_land, _jump_apex_latch, _jump_air_latch, _v_impact]
+                    ev_takeoff, ev_land, _jump_apex_latch, _jump_air_latch, _v_impact,
+                    int(bool(mode == MODE_TWOW and jump_net_on))]
             assert len(row) == len(columns), "采样值数量与表头列数不一致"
             seg.append(row)
 

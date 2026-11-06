@@ -111,6 +111,15 @@ class BaseTask():
                         gymapi.Vec3(*li),
                         gymapi.Vec3(*getattr(self.cfg.viewer, "light_ambient", [0.55, 0.55, 0.55])),
                         gymapi.Vec3(*getattr(self.cfg.viewer, "light_direction", [-0.6, 0.6, -0.55])))
+                # 【2026-11-01】第二盏方向光（低角度反侧补光）：None = 不设（保持出厂）
+                li2 = getattr(self.cfg.viewer, "light2_intensity", None)
+                if li2 is not None:
+                    print(f"[viewer] light2_intensity={li2}")
+                    self.gym.set_light_parameters(
+                        self.sim, 1,
+                        gymapi.Vec3(*li2),
+                        gymapi.Vec3(*getattr(self.cfg.viewer, "light2_ambient", [0.0, 0.0, 0.0])),
+                        gymapi.Vec3(*getattr(self.cfg.viewer, "light2_direction", [0.5, -0.6, -0.35])))
             except Exception as _e:
                 print(f"[viewer] set_light_parameters 未生效：{_e}")
 

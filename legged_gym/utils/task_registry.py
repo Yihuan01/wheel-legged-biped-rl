@@ -198,6 +198,16 @@ class TaskRegistry:
             )
             print(f"Loading model from: {resume_path}")
             runner.load(resume_path)
+            # 【P7F4 修复】resume 的 load_optimizer=True 会把 ckpt 里保存的旧 lr 一并恢复进
+            #   optimizer；固定 schedule 下 PPO.update 不再触碰 lr（ppo.py 仅 adaptive 分支改），
+            #   ⇒ config 声明的 learning_rate 在热启动时被静默覆盖。历史实证：P8W7 交付 ckpt
+            #   optimizer lr=3e-4，即两轮线 P8W6a「热启动降 lr 1e-4」实际从未生效。
+            #   此处以 config 为准重设，让已批准的「热启动统一降 lr」真正落地。
+            _lr = float(train_cfg_dict["algorithm"]["learning_rate"])
+            runner.alg.learning_rate = _lr
+            for _pg in runner.alg.optimizer.param_groups:
+                _pg["lr"] = _lr
+            print(f"Learning rate after resume: {_lr} (config 值，覆盖 ckpt 恢复值)")
         return runner, train_cfg
 
 

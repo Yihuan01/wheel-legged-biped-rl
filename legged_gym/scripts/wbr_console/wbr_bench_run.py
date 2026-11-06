@@ -52,6 +52,8 @@ def _build_argv(spec):
         argv += ["--standup_checkpoint", ("" if isinstance(_su, dict) else _su)]
         argv += ["--w3_checkpoint", spec["slots"]["w3"]]
         argv += ["--lie_checkpoint", spec["slots"]["lie"]]
+        # 【P8 五槽】跳跃槽（事件级）：空=不加载
+        argv += ["--jump_checkpoint", (spec["slots"].get("jump") or "")]
         argv += ["--task", "wbr_uni" if mode == "uni" else "wbr_switch"]
     else:
         single = spec.get("single") or {}
@@ -63,6 +65,12 @@ def _build_argv(spec):
             argv += ["--checkpoint", str(single["checkpoint"])]
         if single.get("from_run_config"):
             argv += ["--from_run_config", _abs(single["from_run_config"])]
+        try:
+            _rb = max(1, min(3, int(single.get("robots"))))
+        except (TypeError, ValueError):
+            _rb = None
+        if _rb is not None:
+            argv += ["--num_envs", str(_rb)]   # 机器人数 1~3（模型配置页选择）
     return argv
 
 
@@ -89,6 +97,7 @@ def main():
     from deps import play02_core as play02
     import bench_bridge
 
+
     # 运行时替换面板：签名一致，只起 HTTP 控制口
     play02.start_gui_thread = bench_bridge.install
 
@@ -102,7 +111,7 @@ def main():
         _orig_build = play02._build_switch
 
         def _build_switch_with_params(args, task="wbr_switch"):
-            env, p4w, pstand, p_w3, p_lie = _orig_build(args, task)
+            env, p4w, pstand, p_w3, p_lie, p_jump = _orig_build(args, task)
             sw = env.cfg.rewards.switch
             applied = {}
             for k in _PHASE_KEYS:
@@ -113,6 +122,24 @@ def main():
                         applied[k] = float(v)
                     except (TypeError, ValueError):
                         pass
+            # 【P8 五槽】跳跃模板保真：params["jump_cfg"]=P8J config.json ⇒ 整块 rewards.jump
+            #   写进 env.cfg（uni 继承的 wbr_flat4 跳跃机由此读到 crouch_abs_by_h_moving/
+            #   moving_crouch_vx_gate/1c 三锚点等 P8J 键），并附 commands.ranges 供事件窗切量程；
+            #   然后恢复控制台的 arm_delay=0.1（瞬时起跳节流，_build_switch 原语义）。
+            _jc = params.get("jump_cfg")
+            if _jc:
+                import json as _json
+                _jp = _abs(_jc)
+                with open(_jp, "r", encoding="utf-8") as _fh:
+                    _jd = _json.load(_fh)
+                _jk = (_jd.get("rewards") or {}).get("jump") or {}
+                for _k, _v in _jk.items():
+                    setattr(env.cfg.rewards.jump, _k, tuple(_v) if isinstance(_v, list) else _v)
+                env.cfg.rewards.jump.arm_delay = 0.1
+                _jr = (_jd.get("commands") or {}).get("ranges") or {}
+                env._jump_cfg_ranges = {k: tuple(v) for k, v in _jr.items()}
+                applied["jump_cfg"] = {"path": _jp, "keys": len(_jk),
+                                       "ranges": sorted(env._jump_cfg_ranges.keys())}
             # 传统起立（方案①脚本链）参数：standup_mode + t_trad_*/trad_*（缺省值在 play02_core.run_switch 内）
             sm = params.get("standup_mode")
             if sm is not None and str(sm).strip():
@@ -161,7 +188,7 @@ def main():
             trad_bits = [k for k in ("standup_mode",) + _TRAD_KEYS if k in applied]
             if trad_bits:
                 print("🦿 [bench] 传统起立参数已应用：" + ", ".join(f"{k}={applied[k]}" for k in trad_bits))
-            return env, p4w, pstand, p_w3, p_lie
+            return env, p4w, pstand, p_w3, p_lie, p_jump
 
         def _install_leg_boost(env, boost):
             """包一层 env.playback_set_mode（run_switch 的 _apply_mode 每步都以当前相位调它）：

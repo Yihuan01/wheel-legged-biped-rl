@@ -62,7 +62,7 @@ class WBRFlat4Cfg(WBRFlatCfg):
             'caster': 0.02,
         }
         leg_action_scale = 0.5
-        wheel_action_scale = 3.0
+        wheel_action_scale = 3.0   # 【P7F4 v2】保持 3.0：v1 改 5.5 造成 ×1.83 输出重映射，F3e 基座倒退全崩（diag 实证：F3e 在新 env 下 −1.0 全摔、全体过冲 15~45%）；旧输出映射必须零扰动
         wheel_target_accel_limit = 0.0
         wheel_acceleration_filter_alpha = 0.8
         decimation = 2
@@ -100,7 +100,7 @@ class WBRFlat4Cfg(WBRFlatCfg):
         pd_gain_range = [0.9, 1.1]            # 腿部 PD 增益乘子
         motor_strength_range = [0.9, 1.1]     # 电机力矩乘子
         com_offset_range = [-0.01, 0.01]      # 基座质心三轴偏移（m）
-        caster_joint_damp_range = [0.015, 0.03]  # 从动轮关节阻尼区间
+        caster_joint_damp_range = [0.015, 0.03]  # 从动轮关节阻尼区间【P7F7 回滚 F3e 态：低阻尼零收益且扰动已学步态（Phase 1/载荷探针判决）】
         push_pitch_vel_max = 0.2              # 推扰叠加的俯仰角速度脉冲
         imu_gyro_bias_range = [-0.03, 0.03]   # 陀螺零偏（rad/s）
         imu_acc_bias_range = [-0.1, 0.1]      # 加计零偏（m/s²）
@@ -126,7 +126,7 @@ class WBRFlat4Cfg(WBRFlatCfg):
             turning_wheel = 2.0        # 转向轮形塑：yaw 时奖励同向轮转 ωL + ωR ≈ 4.5·yaw
             tracking_base_height = 5.0  # 体高跟踪权重；顶端物理上限 0.246 m
             # ── 姿态与平顺 ──
-            orientation = -5.0         # 姿态惩罚：pitch → 0、roll → 0（见 wbr_flat4.py 覆写；负号 = 惩罚）
+            orientation = -5.0         # 【P7F7 回滚 −5】：一次一变量，本轮唯一增量=hinge 收紧；水平激励留终轮
             lin_vel_z = -4.0
             ang_vel_xy = -1.2          # 俯仰 / 滚转角速度惩罚，抑制抖动
             wrong_way = -2.0
@@ -154,7 +154,7 @@ class WBRFlat4Cfg(WBRFlatCfg):
             jump_leg_apex = 0.0
 
         # 复用基类阈值
-        velocity_tracking_error_limit = 0.8  # 线速度 hinge 带宽；给倒退 −1.0 留余量
+        velocity_tracking_error_limit = 0.45  # 【P7F7】0.8→0.45：线速度 hinge 收紧（载荷探针判决主因=远端欠指令，带宽过宽稀释梯度；对齐两轮 W3「量程≤带宽」惯例 ±1.5/0.45）
         yaw_tracking_error_limit = 0.5       # 偏航 hinge 带宽；cmd ±1.0 时误差约 0.1 < 0.5，梯度充足
         height_tracking_error_limit = 0.05   # 体高 hinge 带宽（收窄后顶端仍有梯度）
         roll_tracking_gain = 60.0
@@ -175,15 +175,23 @@ class WBRFlat4Cfg(WBRFlatCfg):
         turning_roll_coeff = 0.0        # 不压弯
 
         class ranges:
-            lin_vel_x = [-1.0, 1.0]     # vx 指令量程（m/s）
+            lin_vel_x = [-1.5, 1.5]     # 【P7F4 StageA】±1.0→±1.5：vx 提速第一档（预注册计划 §3）
             lin_vel_y = [0.0, 0.0]
-            ang_vel_yaw = [-1.0, 1.0]   # 偏航指令量程（rad/s），实测可达约 0.95
+            ang_vel_yaw = [-1.5, 1.5]   # 【P7F5 StageB】±1.0→±1.5：偏航提速（预注册计划 §3；兼作 Stage A 极值收敛续训）
             heading = [0, 0]
             jump_height = [0.05, 0.05]  # 闸门关死
             # 高度固定 0.19 m（区间退化）。
             #   半宽地板已在 wbr_flat4.py 观测归一化处理（0.05），退化不再爆炸。
             base_height = [0.175, 0.245]  # 体高指令量程（m）；可达范围 0.171~0.246，两端留余量
             ang_roll = [0.0, 0.0]
+
+        class envelope(WBRFlatCfg.commands.envelope):
+            # 【P7F4】取消 yaw 包络：b=2.14/k=1.34 为两轮平衡模式的 vx·ω 耦合遗产
+            #   （定义见 wbr_flat_config.py），四轮差速＋万向轮不吃这套限制。
+            #   放大 expand ⇒ cap 永不绑定（wbr_flat4.py::_apply_command_envelope 的现成旁路键）。
+            #   安全核算：轮距 0.187 m，(vx2.0, yaw1.5) 需轮速 2.14 m/s < 轮速上限
+            #   2.2 m/s（clip 5 × scale 5.5 × r 0.08）——轮速饱和即四轮自身物理包络。
+            expand = 1e3
 
     class normalization(WBRFlatCfg.normalization):
         class obs_scales(WBRFlatCfg.normalization.obs_scales):
@@ -196,11 +204,15 @@ class WBRFlat4Cfg(WBRFlatCfg):
             joint_state_history = 0.25
             height_measurements = 5.0
         clip_observations = 100.
-        clip_actions = 5.
+        clip_actions = 9.2   # 【P7F4】5→9.2：轮速上限 15→27.6 rad/s（1.2→2.21 m/s）；抬 clip 不动 scale，旧输出（|a|≤5）映射与 F3e 逐位一致，新速度 headroom 靠更大输出触达
 
 
 class WBRFlat4CfgPPO(WBRFlatCfgPPO):
+    class algorithm(WBRFlatCfgPPO.algorithm):
+        # 【P7F4】热启动统一降 lr（3e-4→1e-4），同两轮线 P8W6a：此前 6/6 次热启动行为漂移，降 lr 抑制。
+        learning_rate = 1.0e-4
+
     class runner(WBRFlatCfgPPO.runner):
         experiment_name = 'wbr_flat4'
-        run_name = 'P7F3e'
-        max_iterations = 500  # 转向 ±1 + 15 项随机化 + 延迟；交付权重 model_11800
+        run_name = 'P7F7'
+        max_iterations = 500  # 缺省值；实际训练轮数走命令行 --max_iterations（相对值）

@@ -1,0 +1,42 @@
+{
+ "source_npz": "legged_gym/envs/wbr/terrain/release/wbr_p8_demo.npz",
+ "source_sha256": "cff9b266a392fdb985ba2083e21c7af24c366b365ffb751378b33304664accc3",
+ "base_mjcf": "legged_gym/scripts/sim2sim_mujoco/assets/mjcf/wbr_v2.xml",
+ "mjcf": "legged_gym/scripts/sim2sim_mujoco/assets/mjcf/wbr_v2_demo.xml",
+ "mjcf_sha256": "2bb80bf9ea8a1382359bf6b49c798d1f66d1705007294b9d4c4fcdece22cce6b",
+ "hfield_png": "legged_gym/scripts/sim2sim_mujoco/assets/terrain/wbr_v2_demo.png",
+ "hfield_png_sha256": "089d8de7f8f7552e788ab0921bc5ba6484aa9728b4a32eaa18e5a91b1fcf540f",
+ "hfield_data_shape": [
+  570,
+  795
+ ],
+ "quant_mm": 3.788,
+ "h_scale": 0.1,
+ "v_scale": 0.002,
+ "border": 25.0,
+ "size": [
+  39.75,
+  28.5,
+  0.966,
+  0.5
+ ],
+ "center_xy": [
+  14.75,
+  3.5
+ ],
+ "z_min": -0.6,
+ "z_max": 0.366,
+ "z_offset": 0.0,
+ "z_base": 0.5,
+ "z_pos": -0.6,
+ "spawn_xy": [
+  4.0,
+  3.5
+ ],
+ "spawn_z": 0.0,
+ "spawn_center_m": [
+  4.0,
+  3.5
+ ],
+ "note": "高度图以 8-bit L 模式 PNG 内嵌在 <hfield file=...>（MuJoCo 3.17 只认该格式）；z_surface = z_base + zscale*data = z + z_offset；机器人初始 z 需加 z_offset"
+}
