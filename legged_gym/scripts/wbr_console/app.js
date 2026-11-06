@@ -303,7 +303,11 @@
     S.tab = key; store.set('tab', key);
     $$('[data-tab]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-tab') === key)); });
     $$('.page').forEach(function (p) { p.classList.toggle('on', p.getAttribute('data-page') === key); });
-    if (key === 'mujoco') { cfxRestore(); cfxFillModels(); cfxFillManifest(); }
+    if (key === 'mujoco') {
+      cfxRestore(); cfxFillModels(); cfxFillManifest();
+      // 【2026-11-06】自动预检：首次进入本页即跑一次（之后仍可手动重跑）
+      if (!S.mjAutoPre) { S.mjAutoPre = true; mjRunPreflight(true); }
+    }
     if (key === 'plot') ensurePlot();
     // 原生窗口：离开运行页降下，回到运行页重新贴合
     if (key === 'run') {
@@ -825,9 +829,11 @@
     POST('/api/settings', { params: out }).catch(function () { });
   }
 
-  function renderPreflight(items) {
+  function renderPreflight(items, boxId) {
     // 【2026-10-29】地形任务：preflight 里会多一行 "地形：xxx.npz"，直接显示会加载哪张图
-    var box = document.getElementById('preflight');
+    // 【2026-11-06】boxId 参数化：Isaac(#preflight) 与 MuJoCo(#cfxChecks) 共用同一渲染
+    //   （此前 MJ 侧自带 inline .74rem，导致两卡预检字号不一）
+    var box = document.getElementById(boxId || 'preflight');
     box.innerHTML = '';
     (items || []).forEach(function (p) {
       var cls = p.level === 'ok' ? 'ok' : p.level === 'warn' ? 'wn' : p.level === 'bad' ? 'bd' : 'muted';
@@ -1981,13 +1987,16 @@
     }).catch(function () { document.getElementById('cfxParity').textContent = '对账数据读取失败（eval/golden/parity.json）'; });
   }
   function cfxRenderChecks(items) {
-    var box = document.getElementById('cfxChecks'); if (!box) return;
-    box.innerHTML = '';
-    (items || []).forEach(function (p) {
-      var mark = p.level === 'ok' ? '✓' : p.level === 'warn' ? '⚠' : p.level === 'bad' ? '✗' : '·';
-      box.appendChild(el('span', { class: p.level, style: 'font-size:.74rem;display:block' },
-        [el('b', { text: mark }), document.createTextNode(' ' + p.text)]));
-    });
+    renderPreflight(items, 'cfxChecks');   // 【2026-11-06】统一渲染：与 Isaac 预检同字号同结构
+  }
+  function mjRunPreflight(silent) {
+    POST('/api/preflight', { spec: buildMujocoSpec() }).then(function (j) {
+      cfxRenderChecks(j.items);
+      if (!silent) {
+        var bad = (j.items || []).filter(function (i) { return i.level === 'bad'; }).length;
+        toast(bad ? ('预检有 ' + bad + ' 项不通过') : '预检通过', bad ? 'bad' : 'ok');
+      }
+    }).catch(function (e) { if (!silent) toast('预检失败：' + e.message, 'bad'); });
   }
   function cfxStart() {
     mjPersist();
@@ -2494,14 +2503,7 @@
       mjPersist();
     });
     var cfxBtn = document.getElementById('cfxCheckBtn');
-    if (cfxBtn) cfxBtn.addEventListener('click', function () {
-      mjPersist();
-      POST('/api/preflight', { spec: buildMujocoSpec() }).then(function (j) {
-        cfxRenderChecks(j.items);
-        var bad = (j.items || []).filter(function (i) { return i.level === 'bad'; }).length;
-        toast(bad ? ('预检有 ' + bad + ' 项不通过') : '预检通过', bad ? 'bad' : 'ok');
-      }).catch(function (e) { toast('预检失败：' + e.message, 'bad'); });
-    });
+    if (cfxBtn) cfxBtn.addEventListener('click', function () { mjPersist(); mjRunPreflight(false); });
     var cfxExp = document.getElementById('cfxExportBtn');
     if (cfxExp) cfxExp.addEventListener('click', function () {
       cfxExp.disabled = true;

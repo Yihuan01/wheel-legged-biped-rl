@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>WBR Console · WBR 控制台</title>
 <script>(function(){try{var t=localStorage.getItem('wbr.theme');t=t?JSON.parse(t):'system';if(t!=='light'&&t!=='dark'&&t!=='system')t='system';document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','system');}})();</script>
-<link rel="stylesheet" href="app.css?v=20261106s">
+<link rel="stylesheet" href="app.css?v=20261106t">
 </head>
 <body>
 <div class="app" id="app" data-nav="left">
@@ -103,6 +103,7 @@
             <span class="lbl">日志</span>
             <select class="input" id="plotLog" style="max-width:22rem"></select>
             <button class="btn sm" id="plotRefresh" title="重新拉取最新遥测文件列表（新跑的仿真会出现在最上面）">↻ 刷新</button>
+            <button class="btn sm" id="cfxExportBtn" title="把 MuJoCo 最新一次录制（eval/runs 下带 telemetry.tsv）画成 vx/高度/姿态三联图 PNG">导出 MJ 录制图</button>
             <span class="kindbadge" id="plotKind">—</span>
             <div class="cfgchip" id="plotCfgChip" title="查看这份录像使用的权重配置">
               <span>权重配置</span><b id="plotCfgName">—</b><span class="caret">▾</span>
@@ -237,10 +238,7 @@
       <div class="box mj-box pf-wide">
         <h4>启动预检 <span class="badge">先预检再启动</span></h4>
         <div class="bd">
-          <div class="checks two" id="cfxChecks"><span class="muted" style="font-size:.74rem">点「预检」检查解释器 / MJCF / 权重与契约 / 端口</span></div>
-          <div class="mj-row">
-            <button class="btn" id="cfxExportBtn" title="把最新一次录制（eval/runs 下带 telemetry.tsv）画成 vx/高度/姿态三联图 PNG">导出图（最新录制）</button>
-          </div>
+          <div class="checks two" id="cfxChecks"><span class="muted">进入本页自动预检：解释器 / MJCF / 权重与契约 / 端口</span></div>
         </div>
       </div>
         <div class="mj-grid">
@@ -488,6 +486,6 @@
 <div id="toast" style="position:fixed;right:1rem;bottom:1rem;z-index:99;display:flex;flex-direction:column;gap:.4rem;align-items:flex-end"></div>
 
 <script src="mock.js"></script>
-<script src="app.js?v=20261106s"></script>
+<script src="app.js?v=20261106t"></script>
 </body>
 </html>
