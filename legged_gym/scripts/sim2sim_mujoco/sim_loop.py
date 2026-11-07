@@ -3,9 +3,9 @@
 # Author    : SYH
 # File      : sim_loop.py
 # Purpose   : MuJoCo 四轮运行核（一核两壳）：MjWbr 物理状态访问 + SimLoop 控制循环
-#             （指令限速 → 观测拼装 → 策略推理 → 腿 PD/轮速度环 200 Hz 力矩 → 终止判定
-#             → 遥测）。run_policy.py（固定指令批量）与 serve.py（控制台实时）共用，
-#             物理语义与 run_policy 旧版逐位一致（golden 对账把关）。
+# （指令限速 → 观测拼装 → 策略推理 → 腿 PD/轮速度环 200 Hz 力矩 → 终止判定
+# → 遥测）。run_policy.py（固定指令批量）与 serve.py（控制台实时）共用，
+# 物理语义与 run_policy 逐位一致（golden 对账把关）。
 # ==============================================================================
 
 import json
@@ -25,7 +25,7 @@ from legged_gym.scripts.sim2sim_mujoco.deploy.com_model import com_constants, co
 PKG = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(PKG, "../../.."))
 
-# 指令限速（设计稿验收第 5 条的数值）：vx m/s²、h m/s。批量 CLI 模式关闭（保持旧版逐位行为）。
+# 指令限速（设计稿验收第 5 条的数值）：vx m/s²、h m/s。批量 CLI 模式关闭（与 run_policy 逐位一致）。
 SLEW_VX = 0.8
 SLEW_H = 0.15
 
@@ -171,13 +171,13 @@ class SimLoop:
         self._last_tick = None             # 【节拍】上一拍墙钟时刻（独立于 reset，见 tick()）
         self.stop_requested = False        # 【停止】桥置位，主循环下一拍即退出
         self.wheel_i = [i for i, n in enumerate(contract["dof_names"]) if "wheel" in n]
-        self.slew = True                       # serve.py 打开（控制台平滑）；批量 CLI 关闭（旧版行为）
+        self.slew = True                       # serve.py 打开（控制台平滑）；批量 CLI 关闭（与 run_policy 逐位一致）
         self.out_tsv = None
         self.cmds = np.zeros(7)
         self.cmd_target = np.zeros(7)
         self.reset_requested = False
         # 【S2b 跳跃】相位机实时移植（jump_template.py）：ph/off_knee/off_hip 由模板闭环生成；
-        #   回放式驱动接口保留（set_off_knee/set_phase/set_jump_air 供 golden 对照）。
+        # 回放式驱动接口保留（set_off_knee/set_phase/set_jump_air 供 golden 对照）。
         self.jump = {"ph": 0, "off": 0.0, "off_hip": 0.0, "air_z": 0.0, "goal": 0.0, "latched": False}
         # 【S2c 趴下】switch 相位（外部脚本驱动，obs 尾块消费）
         self.p7t = None                      # 【S3】P7T 脚本起立（activate_p7t 激活）
@@ -191,7 +191,10 @@ class SimLoop:
         self.lin_vel_noise = 0.02
         self._obs_hist = []                  # [(obs, ...)] 延迟缓冲
         self._act_hist = []
-        self.action_ramp = None              # 【P7T2】交棒后动作渐入：(剩余拍数, 总拍数)，None=关闭
+        self.action_ramp = None              # 交棒后动作渐入：(剩余拍数, 总拍数)，None=关闭
+        self.action_ramp_from = None         # 渐入起点动作（None＝从 0 渐入）
+        self.action_ramp_left = None         # 逐通道渐入剩余拍数
+        self.action_ramp_total = None        # 逐通道渐入总拍数（0＝该通道不渐入）
         self.sw_state = {"ph": int(contract.get("switch_tail", {}).get("ph_start", 3)),
                          "task": int(contract.get("switch_tail", {}).get("task", 0)), "uep": 0.0}
         self.obs_b.sw_state = self.sw_state
@@ -211,7 +214,7 @@ class SimLoop:
         self.ctl.reset()
         self.last_action = np.zeros(self.c["act_dim"], dtype=np.float32)
         self.caster_air = 0
-        self.caster_air_ok = False      # 【P7T2】起立段置 True：从动轮离地是必然过程，不算终止
+        self.caster_air_ok = False      # 起立段置 True：从动轮离地是必然过程，不算终止
         self.rows = []
         self.steps_done = 0
         self.terminated = None
@@ -271,15 +274,25 @@ class SimLoop:
         self.p7t_done = False
 
     def activate_p7t2(self, params=None):
-        """【P7T2】激活平台式起立（轨迹前馈＋PD；四轮蹲姿起步）。接口与 P7T 同形。
+        """激活平台式起立（轨迹前馈＋PD；四轮蹲姿起步）。接口与 P7T 同形。
         起立过程从动轮必然离地（四轮→两轮支撑转移），关闭 caster_air 终止。"""
         from legged_gym.scripts.sim2sim_mujoco.deploy.p7t2_platform_standup import P7T2PlatformStandup
-        self.p7t = P7T2PlatformStandup(dt=float(self.c["control_dt"]), params=params)
+        p = dict(params or {})
+        # ① 静稳段保持**当前四轮站姿**（从契约取，别让控制器猜；2026-11-07 实测根因修复）
+        names = self.c["dof_names"]
+        p.setdefault("pose_4w", [float(self.c["default_dof_pos"][names.index(n)])
+                                 for n in ("left_hip_joint", "left_knee_joint",
+                                           "right_hip_joint", "right_knee_joint")])
+        self.p7t = P7T2PlatformStandup(dt=float(self.c["control_dt"]), params=p)
         self.p7t_done = False
         self.caster_air_ok = True
         self.caster_air = 0
-        # 【交棒无缝】甩/接期间预置 W3 槽语义的 off_knee（否则交棒瞬间 -0.1 阶跃 → 膝角突变）
-        self.ctl.off_knee = -0.1
+        # 这里**不能**预置 off_knee=-0.1：四轮契约的 off_knee_const 是 0，
+        # 进 RISE 第一拍膝目标就跳 0.1 rad ⇒ 机体瞬间前倾 8.8°（实测），轮矩律随即前驱"纠正"，
+        # 整机先前进 ~0.29 m 再回摆——"前进后晃"的根源就在这里。
+        # 交棒偏置改在 `_enter("IDLE2W")` 里设（2W 契约本身 off_knee_const=-0.1），并在
+        # action_ramp_from 里补偿掉，交棒瞬间目标仍然连续。
+        self.ctl.off_knee = 0.0
 
     def set_switch_phase(self, ph, ph_t=None):
         """【S2c 趴下】外部相位脚本驱动（console 趴下时序语义）。"""
@@ -353,7 +366,8 @@ class SimLoop:
             _pitch_t, _roll_t = self.sim.body_pitch_roll(pg)
             # 注意：MJ 自由关节 qvel[4] 与 pitch 反号（pitch = asin(-pg[0])）⇒ 取负
             o = self.p7t.step(z=z_now, body_pitch=float(_pitch_t), vz=vz_now,
-                              pitch_rate=-float(ang_b[1]), roll=float(_roll_t))
+                              pitch_rate=-float(ang_b[1]), roll=float(_roll_t),
+                              vx=float(lin_b[0]))
             legs4 = [self.c["dof_names"].index(n) for n in
                      ("left_hip_joint", "left_knee_joint", "right_hip_joint", "right_knee_joint")]
             self.ctl.leg_override = o["default_leg"]
@@ -364,7 +378,7 @@ class SimLoop:
             # flat.py 语义：p_gains[leg_dof] = 名义 × boost（四条腿 dof 直写）
             for i in legs4:
                 self.ctl.kp[i] = self.ctl.kp0[i] * o["boost"]
-            if "wheel_torque_l" in o:      # 【P7T2】左右差动（roll 控制）
+            if "wheel_torque_l" in o:      # 左右差动（roll 控制）
                 self.ctl.wheel_override_l = o["wheel_torque_l"]
                 self.ctl.wheel_override_r = o["wheel_torque_r"]
                 self.ctl.wheel_override = o["wheel_torque_l"]   # 兼容：取左值
@@ -377,12 +391,15 @@ class SimLoop:
                 self.p7t_done = True
                 self.ctl.leg_override = None
                 self.ctl.wheel_override = None
-                self.ctl.wheel_override_l = None   # 【P7T2】差动残留会压住 W3 轮速环 → 后翻
+                self.ctl.wheel_override_l = None   # 差动残留会压住 W3 轮速环 → 后翻
                 self.ctl.wheel_override_r = None
                 self.ctl.leg_boost = 1.0
                 self.ctl.off_hip = 0.0
-                for k, i in enumerate(legs4):     # 交 W3：default 恢复两轮站姿
-                    self.ctl.default[i] = [1.0, -2.1, -1.0, 2.1][k]
+                # default 沿用**起立脚本最后一拍的腿角**，不硬编码两轮站姿。
+                # ⚠ 不能写死 [1.0,-2.1]：RISE 终点腿在 1.415/−2.113（W3 稳态姿），交棒瞬间
+                # default 若跳到 1.0 ⇒ CoM 后移 8 cm ⇒ 机体立刻后仰落到从动轮上，W3 再也起不来。
+                for k, i in enumerate(legs4):
+                    self.ctl.default[i] = float(o["default_leg"][k])
         if self.c.get("switch_tail"):
             roll_s, pitch_s = self.sim.body_pitch_roll(pg)
             self.sw_state["uep"] = float(np.clip(pitch_s / 0.35, -1.0, 1.0))   # UEP 代理（俯仰/0.35 归一）
@@ -407,7 +424,7 @@ class SimLoop:
             act = np.zeros(self.c["act_dim"], dtype=np.float32)
         else:
             act = self.pol.act(obs)[0].numpy()
-            if self.action_ramp is not None:   # 【P7T2】交棒后动作渐入
+            if self.action_ramp is not None:   # 交棒后动作渐入
                 if self.action_ramp == "hold1s_then_ramp":
                     # 特殊模式：前 1s 完全零动作（腿 PD 锚住），之后 0.5s 线性渐入
                     if not hasattr(self, "_ramp_start") or self._ramp_start is None:
@@ -423,8 +440,30 @@ class SimLoop:
                             self._ramp_start = None
                 else:
                     left, total = self.action_ramp
-                    act = act * (1.0 - left / total)
+                    r = 1.0 - left / total
+                    _from = getattr(self, "action_ramp_from", None)
+                    _left = getattr(self, "action_ramp_left", None)
+                    if _from is not None and _left is not None:
+                        # 从**起立末态对应的动作值**过渡到策略动作。
+                        # · 腿：2 s 长渐入——直接 act*r 会让 r=0 时目标=default（1.0/−2.1），
+                        # 腿瞬间后移 8 cm ⇒ CoM 后移 ⇒ 机体后仰落到从动轮上，W3 起不来；
+                        # · 轮：0.3 s 短渐入——轮是平衡执行器，交棒瞬间保持 −32 rad/s（起立末态）
+                        # 等于没有平衡，机体会无阻尼后仰；也不能直接清零（−2 m/s 硬刹 → 后仰 30°）。
+                        _tot = np.asarray(self.action_ramp_total, dtype=np.float32)
+                        _r = np.where(_tot > 0,
+                                      np.clip(1.0 - _left / np.maximum(_tot, 1.0), 0.0, 1.0),
+                                      1.0).astype(np.float32)
+                        act = _from * (1.0 - _r) + act * _r
+                        self.action_ramp_left = np.maximum(_left - 1, 0)
+                    elif _from is not None:
+                        act = _from * (1.0 - r) + act * r
+                    else:
+                        act = act * r
                     self.action_ramp = (left - 1, total) if left > 0 else None
+                    if self.action_ramp is None:
+                        self.action_ramp_from = None
+                        self.action_ramp_left = None
+                        self.action_ramp_total = None
         if self.delay_act > 0:               # 【S4】动作延迟
             self._act_hist.append(act)
             if len(self._act_hist) > self.delay_act:
@@ -452,7 +491,7 @@ class SimLoop:
         t = len(self.rows)
         pitch, roll = self.sim.body_pitch_roll(pg)
         if record:
-            self.rows.append(dict(
+            row = dict(
                 t=round(t * float(self.c["control_dt"]), 3),
                 cmd_vx=float(self.cmd_target[0]), cmd_yaw=float(self.cmd_target[2]), cmd_h=float(self.cmd_target[5]),
                 vx=float(snap["lin_b"][0]), vy=float(snap["lin_b"][1]), wz=float(snap["ang_b"][2]),
@@ -464,7 +503,43 @@ class SimLoop:
                 # 【绘图页遥测】vz（竖直速度）/ cmd_roll（滚转指令）/ dbg_ph（跳跃相位 0-5）
                 vz=float(self.sim.d.qvel[2]), cmd_roll=float(self.cmd_target[6]),
                 dbg_ph=int(self.jump["ph"]),
-            ))
+            )
+            # 按 Isaac 遥测**同列名**补全部 dof × 6 列
+            # （pos_tgt/pos_act/vel_tgt/vel_act/tau_tgt/tau_act，Isaac 对所有 dof 都写 6 列）。
+            # ⚠ 必须**逐 dof_names（8 个，含 caster）**而不是 action_dof_names（6 个）：
+            # plot02 按 #joints 建面板，`left_knee_caster_joint` 名字里含 "knee" 会被归为
+            # 膝类生成"左膝 速度/扭矩"面板（caster 非腿 → 取 vel_* 列）——缺列就显示
+            # "无该列数据"（MJ 右髋区域两个空面板实为 caster 面板）。
+            # 目标值复现：PD 目标 = default + scale·act + off_knee/off_hip（与 control.torques
+            # 同式）；轮 dof 目标走 ctl.wheel_target（速度环）；caster 无执行器 ⇒ 目标=实际。
+            _dp, _dv2 = self.sim.dof_pos(), self.sim.dof_vel()
+            _act = np.asarray(self.last_action, dtype=float)
+            _adi = self.ctl.adi
+            _scale = self.ctl.scale_vec.numpy()
+            _offk = float(self.ctl.off_knee)
+            _offh = float(self.ctl.off_hip)
+            _wtgt = {i: float(self.ctl.wheel_target[k])
+                     for k, i in enumerate(self.ctl.wheel_dof)}
+            _act_of = {self.ctl.adi[_j]: _j for _j in range(len(self.ctl.adi))}
+            for _i, _n in enumerate(self.c["dof_names"]):
+                _j = _act_of.get(_i)
+                if "wheel" in _n:
+                    _vt = _wtgt.get(_i, 0.0)
+                elif _j is None:
+                    _vt = float(_dp[_i])            # caster 等无执行器 dof：目标=实际
+                else:
+                    _vt = (float(self.ctl.default[_i]) + float(_scale[_j]) * float(_act[_j]))
+                    if _offk and "knee" in _n:
+                        _vt += _offk if "left" in _n else -_offk
+                    if _offh and "hip" in _n:
+                        _vt += _offh if "left" in _n else -_offh
+                row[f"pos_tgt__{_n}"] = float(_dp[_i]) if ("wheel" in _n or _j is None) else _vt
+                row[f"pos_act__{_n}"] = float(_dp[_i])
+                row[f"vel_tgt__{_n}"] = _vt if "wheel" in _n else 0.0
+                row[f"vel_act__{_n}"] = float(_dv2[_i])
+                row[f"tau_tgt__{_n}"] = float(tau[_i])
+                row[f"tau_act__{_n}"] = float(tau[_i])
+            self.rows.append(row)
 
         # 终止判定用**步首**接触力（与旧 run_policy 逐位一致：遥测与终止同拍）
         forces = snap["forces"]

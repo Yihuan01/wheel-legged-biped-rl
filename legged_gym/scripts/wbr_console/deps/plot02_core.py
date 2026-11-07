@@ -1,10 +1,10 @@
 # ==============================================================================
 # WBR Console 独立化抽取副本：plot02_core.py
 # 用途：供 wbr_console/bench_plot.py 复用（Index / get_index / read_overview /
-#       read_window / KIND 等数据层）。原始 plot02.py 在 scripts/ 下保持一行不改。
+# read_window / KIND 等数据层）。原始 plot02.py 在 scripts/ 下保持一行不改。
 # 与原版差异（仅 2 处，函数体逐字未动）：
-#   1) DATA_DIR 改为绝对路径；
-#   2) 顶部追加了这段出处说明（其余内容逐字节同 scripts/plot02.py）。
+# 1) DATA_DIR 改为绝对路径；
+# 2) 顶部追加了这段出处说明（其余内容逐字节同 scripts/plot02.py）。
 # ==============================================================================
 
 # ==============================================================================
@@ -12,20 +12,20 @@
 # Author    : SYH
 # File      : plot02.py
 # Purpose   : play02 遥测日志的看图端。纯标准库，不 import isaacgym/torch。
-#             起一个本地服务开浏览器：整宽缩略轴拖拽选时间窗 → 按「绘制」刷新 18 张子图。
+# 起一个本地服务开浏览器：整宽缩略轴拖拽选时间窗 → 按「绘制」刷新 18 张子图。
 #
 # 用法:
-#   python plot02.py                      # 看图（Ctrl+C 关服务）
-#   python plot02.py --dir 别的目录 --thin 600 --port 9000 --no-browser
-#   python plot02.py --out dash.html      # 导出单文件 HTML（数据内嵌，窗口在前端切片，可拷走）
+# python plot02.py                      # 看图（Ctrl+C 关服务）
+# python plot02.py --dir 别的目录 --thin 600 --port 9000 --no-browser
+# python plot02.py --out dash.html      # 导出单文件 HTML（数据内嵌，窗口在前端切片，可拷走）
 #
 # 为什么不会卡死：日志是一个大文件（约 3 MB/分钟），但
-#   ① 服务端只扫一遍建 (字节偏移, 时间) 索引并缓存，之后按窗口 seek 只读需要的那几行；
-#   ② 前端永远只收"窗口内、抽稀到 ≤thin 点"的数据，所以传回来的体积与文件多大无关。
+# ① 服务端只扫一遍建 (字节偏移, 时间) 索引并缓存，之后按窗口 seek 只读需要的那几行；
+# ② 前端永远只收"窗口内、抽稀到 ≤thin 点"的数据，所以传回来的体积与文件多大无关。
 #
 # 版面：5 列，每列 3/3/4/4/4 = 18 张，五列总高相等、列内按 weight 分摊
-#   列1 线速度/偏航/滚转（各 1/3）  列2 竖直速度/跳跃/轮底（各 1/3；相位＝底色带，指令＝段内灰虚线）
-#   列3 髋  列4 膝  列5 轮
+# 列1 线速度/偏航/滚转（各 1/3）  列2 竖直速度/跳跃/轮底（各 1/3；相位＝底色带，指令＝段内灰虚线）
+# 列3 髋  列4 膝  列5 轮
 # ==============================================================================
 
 import argparse
@@ -61,10 +61,10 @@ KIND = {
 }
 
 # 跳跃相位底色（相位号与 play02.py 的 JUMP_PHASES、wbr.py::_update_jump_phase 一致）：
-#   0 待机**不涂色**（否则整页都是底色，反而看不出哪一段是跳）；1~5 各一色。
+# 0 待机**不涂色**（否则整页都是底色，反而看不出哪一段是跳）；1~5 各一色。
 # 配色：色相沿"蓝→青→绿→黄→橙"走一段（HSL 色相 214°→167°→81°→48°→31°），明度
-#   93/89/80/77/72% 递减 ⇒ 哪一档靠色相认、先后次序靠明度认。取 Tailwind 的 100/200/300
-#   色阶（饱和度 85~97%），仍是浅底、不抢三条数据线。
+# 93/89/80/77/72% 递减 ⇒ 哪一档靠色相认、先后次序靠明度认。取 Tailwind 的 100/200/300
+# 色阶（饱和度 85~97%），仍是浅底、不抢三条数据线。
 PHASE_BANDS = [
     dict(name="dbg_ph", value=1, color="#dbeafe", cn="1预蹲", h=1, legend=False),
     dict(name="dbg_ph", value=2, color="#ccfbf1", cn="2爆发", h=1, legend=False),
@@ -113,10 +113,19 @@ def uni_phase(mode, ph, jump):
 
 
 def build_panel_cols(joints, leg_idx, torque_limits, ranges):
-    """18 张子图按列组织。列内顺序＝从上到下；weight 决定该张占本列多高（同列按权重分摊）。"""
+    """18 张子图按列组织。列内顺序＝从上到下；weight 决定该张占本列多高（同列按权重分摊）。
+
+    ⚠ 面板归类两个坑（过滤规则缺一不可）：
+    ① `left_knee_caster_joint` 名含 "knee" 会被归为膝类，生成「左膝 速度/扭矩」面板而
+       实际数据是 caster（从动轮）——标题错、真右膝面板被挤掉 ⇒ caster（无执行器，
+       画出来恒 0）必须排除；
+    ② 若按 groups[kind][:2] 只取每类前 2 个，knee 组 4 个时右膝面板整个消失 ⇒
+       不截断，左右各一对面板都生成。"""
     groups = {k: [] for k in KIND_CN}
     for i, name in enumerate(joints):
         low = name.lower()
+        if 'caster' in low:          # 从动轮：无执行器，不建面板（避免误标"膝"+挤掉真面板）
+            continue
         kind = next((k for k in KIND_CN if k in low), None)
         if kind is None:
             continue
@@ -136,21 +145,20 @@ def build_panel_cols(joints, leg_idx, torque_limits, ranges):
     vz = dict(title="竖直速度 vz", unit="m/s", sym=True, weight=1,
               bands=PHASE_BANDS,
               series=series([("vz_body", "竖直速度", "act")]))
-    # 高度跟随（2026-10-20 新增，与线速度 vx 同一格式：目标/实际/输入）。
-    #   **实际值用 `act_h`（关节角换算的机身高度，不含姿态偏置）** —— 这正是奖励
-    #   `_reward_tracking_base_height` 跟的那个量（body-frame、俯仰免疫）。
-    #   注意：跳跃格里的"机身高度"用的是**姿态校正后**的 `act_h_corr`（世界系），
-    #   两者刻意不同：这里＝奖励的视角，跳跃格＝与"绝对高度/轮底离地"自洽的视角。
+    # 高度跟随（与线速度 vx 同一格式：目标/实际/输入）。
+    # **实际值用 `act_h`（关节角换算的机身高度，不含姿态偏置）** —— 这正是奖励
+    # `_reward_tracking_base_height` 跟的那个量（body-frame、俯仰免疫）。
+    # 注意：跳跃格里的"机身高度"用的是**姿态校正后**的 `act_h_corr`（世界系），
+    # 两者刻意不同：这里＝奖励的视角，跳跃格＝与"绝对高度/轮底离地"自洽的视角。
     htrack = dict(title="高度跟随", unit="m", sym=False, weight=1,
                   series=series([("tgt_h", "目标", "tgt"), ("act_h", "实际", "act"),
                                  ("in_h", "输入", "in")]))
-    # 跳跃总览（2026-10-20）：相位＝底色。
-    #   绝对高度（base 原点的世界 z，实测，蓝）／机身高度（**带姿态偏移**的世界系值 ＝ 绝对高度 − 轮底离地，绿）
-    #   ＋ 双轮离地（橙实线＝瞬时轮底离地，只在双轮离地窗口内非 0）。
-    #   ⇒ **绝对高度 − 机身高度 ＝ 轮底离地(瞬时)**，蓝绿之间的落差就是真跳高，三个量同坐标系自洽。
-    #   【2026-10-20 按用户要求】原深红「轮底离地」峰值阶梯线已并入绿色「机身高度」（二者本重复：
-    #     act_h_corr ＝ body_z − wheel_clear），轮底离地由蓝绿落差直接读出，不再单画一条阶梯。
-    #   量程用 `ticks` 钉死 0~0.5（单轴）：高度占 0.2~0.4、轮底离地占底部 0~0.07。
+    # 跳跃总览：相位＝底色。
+    # 绝对高度（base 原点的世界 z，实测，蓝）／机身高度（**带姿态偏移**的世界系值 ＝ 绝对高度 − 轮底离地，绿）
+    # ＋ 双轮离地（橙实线＝瞬时轮底离地，只在双轮离地窗口内非 0）。
+    # ⇒ **绝对高度 − 机身高度 ＝ 轮底离地(瞬时)**，蓝绿之间的落差就是真跳高，三个量同坐标系自洽。
+    # act_h_corr ＝ body_z − wheel_clear ⇒ 轮底离地由蓝绿落差直接读出，不单画阶梯线。
+    # 量程用 `ticks` 钉死 0~0.5（单轴）：高度占 0.2~0.4、轮底离地占底部 0~0.07。
     rise = dict(title="跳跃", unit="m", sym=False, yrange=None, weight=2,
                 ticks=[0, 0.1, 0.2, 0.3, 0.4, 0.5],
                 bands=PHASE_BANDS,
@@ -162,9 +170,9 @@ def build_panel_cols(joints, leg_idx, torque_limits, ranges):
                                ("act_h_corr", "机身高度", "alt"),
                                ("wheel_clear", "双轮离地", "air")]))
 
-    # 【2026-10-27 统一五列模板】列1 = 线速度/偏航/滚转/**高度跟随**（高度跟随挪到列1最下面）；
-    #   列2 = 竖直速度 vz / 跳跃 / **相位**（相位＝dbg_ph 阶梯线，直观显示相位转换）；
-    #   列3~5 = 髋/膝/轮（沿用原关节定义）。单策略与四槽共用这一份 build_panel_cols。
+    # 列1 = 线速度/偏航/滚转/**高度跟随**（高度跟随挪到列1最下面）；
+    # 列2 = 竖直速度 vz / 跳跃 / **相位**（相位＝dbg_ph 阶梯线，直观显示相位转换）；
+    # 列3~5 = 髋/膝/轮（沿用原关节定义）。单策略与四槽共用这一份 build_panel_cols。
     col1.append(htrack)
     # 相位面板：纵轴只印数字（0-11）；编号↔中文的对应放到「鼠标扫过图标题」的浮动窗口里（phase_legend）。
     phase = dict(title="相位", unit="", sym=False, step=True, weight=1, phase_axis=True,
@@ -172,7 +180,7 @@ def build_panel_cols(joints, leg_idx, torque_limits, ranges):
     cols = [col1, [vz, rise, phase]]
     for kind in COL_ORDER:
         col = []
-        for j in groups[kind][:2]:
+        for j in groups[kind]:      # 不截断：knee 组 4 个时 [:2] 会挤掉右膝面板
             pre, qty, unit = ("pos", "位置", "rad") if j['leg'] else ("vel", "速度", "rad/s")
             col.append(dict(title=f"{j['cn']} {qty}", unit=unit, sym=False, limit=None, weight=1,
                             series=series([(f"{pre}_tgt__{j['dof']}", "目标", "tgt"),
@@ -308,15 +316,15 @@ def read_window(path, t0, t1, thin):
         else:
             data[name] = vals
 
-    # 【2026-10-20】旧 TSV 没有 `act_h_corr` 列（该列是新加的）⇒ 用定义 body_z − wheel_clear 现场补出来，
-    #   这样任何历史录像都能画出跳跃格的绿色「机身高度」线（= 带姿态偏移的世界系机身高度），不会缺线。
-    #   （新录像 play02 会直接写这一列；此处仅作老数据兜底，二者定义完全一致。）
+    # 旧 TSV 没有 `act_h_corr` 列（该列是新加的）⇒ 用定义 body_z − wheel_clear 现场补出来，
+    # 这样任何历史录像都能画出跳跃格的绿色「机身高度」线（= 带姿态偏移的世界系机身高度），不会缺线。
+    # （新录像 play02 会直接写这一列；此处仅作老数据兜底，二者定义完全一致。）
     if 'act_h_corr' in need and 'act_h_corr' not in data and 'body_z' in data and 'wheel_clear' in data:
         data['act_h_corr'] = [bz - wc for bz, wc in zip(data['body_z'], data['wheel_clear'])]
 
-    # 【2026-10-27】统一相位 0-11 兜底：新四槽日志已有 `uni_ph` 列；旧四槽/单策略没有则现场算。
-    #   - 四槽旧日志：有 mode + ph，用 mode/ph + meta.jump 映射；
-    #   - 单策略：dbg_ph 即跳跃相位 0-5，本身就是统一 0-11 的子集，直接用。
+    # 统一相位 0-11 兜底：新四槽日志已有 `uni_ph` 列；旧四槽/单策略没有则现场算。
+    # - 四槽旧日志：有 mode + ph，用 mode/ph + meta.jump 映射；
+    # - 单策略：dbg_ph 即跳跃相位 0-5，本身就是统一 0-11 的子集，直接用。
     if 'uni_ph' in need and 'uni_ph' not in data:
         if 'mode' in data and 'ph' in data:
             _jm = idx.meta.get('jump')
@@ -468,7 +476,7 @@ function draw(cv, p, seg, W, H, scale, fs){
   let lo=Infinity, hi=-Infinity;
   p.series.forEach(s=>(seg.series[s.name]||[]).forEach(v=>{if(isFinite(v)){if(v<lo)lo=v;if(v>hi)hi=v;}}));
   // 指令线（可多条）：连续线（over=null）按实际指令值画阶梯虚线；事件线（over=相位列）取每段首步的值、段外不画。
-  //   值先并进纵轴范围，否则指令常落在曲线区间外、被裁掉。
+  // 值先并进纵轴范围，否则指令常落在曲线区间外、被裁掉。
   const cmdLines=(p.cmd_line||[]).map(cl=>{
     const V=seg.series[cl.name]; if(!V) return null;
     if(!cl.over){ V.forEach(v=>{ if(isFinite(v)){ if(v<lo)lo=v; if(v>hi)hi=v; } });
@@ -494,9 +502,9 @@ function draw(cv, p, seg, W, H, scale, fs){
   const X=i=>M.l+iw*i/last, Y=v=>M.t+ih*(1-(v-lo)/(hi-lo));
 
   // 底色带：画在网格线**之前**，否则满高的相位底色会把横线盖掉。
-  //   h=1 → 涂满绘图区（跳跃相位）；h<1 → 贴着横轴的一条窄带（双轮离地）。
-  //   满高的带子只要够宽就把相位名写在带顶 —— 10 s 窗口里相位只有几像素、自动不写，
-  //   放大到 1~2 s 才出现，等于就地图例，省得去数颜色。
+  // h=1 → 涂满绘图区（跳跃相位）；h<1 → 贴着横轴的一条窄带（双轮离地）。
+  // 满高的带子只要够宽就把相位名写在带顶 —— 10 s 窗口里相位只有几像素、自动不写，
+  // 放大到 1~2 s 才出现，等于就地图例，省得去数颜色。
   (p.bands||[]).forEach(bd=>{ const b=seg.series[bd.name]; if(!b) return;
     const bh=ih*(bd.h==null?1:bd.h), by=M.t+ih-bh, n=b.length;
     for(let i=0;i<n;){
@@ -558,7 +566,7 @@ function render(seg){
       const lg=el("div",{className:"lg"+(p.lg_cls?" "+p.lg_cls:"")});
       if(p.note) lg.appendChild(el("span",{textContent:p.note, style:"margin-right:auto;color:#9ca3af"}));
       // 图例项先收进 map（key: s=曲线 / b=底色带 / c=指令线），再按面板给的 `lg_rows` 出行。
-      //   不给 `lg_rows` 时保持老顺序（曲线→底色→指令线）。
+      // 不给 `lg_rows` 时保持老顺序（曲线→底色→指令线）。
       const _lg={};
       [...p.series].sort((a,b)=>(KIND[b.kind]||{w:0}).w-(KIND[a.kind]||{w:0}).w).forEach(s=>{
         const st=KIND[s.kind]||KIND.act, sp=el("span",{});

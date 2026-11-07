@@ -27,11 +27,14 @@ STORE_RUNS = os.path.join(HERE, "wbr_bench_store", "runs")
 DATA_DIR = os.environ.get("WBR_PLAY_DATA") or plot02.DATA_DIR
 # 随仓库附带的样例遥测：真实目录为空时也能预览绘图页（真实文件优先）
 SAMPLES_DIR = os.path.join(HERE, "samples")
-PATTERNS = ("wbr_tel_*.tsv", "wbr_switch_tel_*.tsv")
+# 前缀两代并存：新 MJ_/Isaac_1_/Isaac_2_；旧 wbr_tel_/wbr_switch_tel_ 保留 ⇒ 历史日志仍可看。
+PATTERNS = ("MJ_*.tsv", "Isaac_1_*.tsv", "Isaac_2_*.tsv",
+            "wbr_tel_*.tsv", "wbr_switch_tel_*.tsv")
 
 
 def is_switch(name):
-    return name.startswith("wbr_switch_tel")
+    """双模式日志：新前缀 Isaac_2_，旧前缀 wbr_switch_tel_*。"""
+    return name.startswith("Isaac_2_") or name.startswith("wbr_switch_tel")
 
 
 def _path(name):
@@ -79,8 +82,8 @@ def _config_from_meta(meta, name):
         for role, key in (("四轮", "4w"), ("起立", "standup"), ("两轮", "3w"), ("趴下", "lie")):
             if role == "起立" and smode in ("trad", "script"):
                 # 传统/相位脚本起立：不加载 P7S 学习策略，改用 P7T 脚本链（script＝env 内 RiseScript，无权重）
-                _lbl = "P7T 相位脚本（无权重）" if smode == "script" else "P7T 传统脚本链"
-                items.append({"role": "起立（传统）", "model": _lbl, "ckpt": "", "path": ""})
+                _lbl = "P7T2 相位脚本（无权重）" if smode == "script" else "P7T 传统脚本链"
+                items.append({"role": "起立（脚本）", "model": _lbl, "ckpt": "", "path": ""})
                 continue
             p = meta.get(key)
             if not p:
@@ -96,8 +99,8 @@ def _config_from_meta(meta, name):
                           "ckpt": "model_%s" % meta.get("model_iter", "?"),
                           "path": md})
         elif meta.get("model_cli"):
-            # 【P7F4】旧录像的 model_dir 恒为 "?"（rsl_rl 1.0.2 无 model_file_path 属性）：
-            #   从 model_cli="<load_run>|<ckpt>" 兜底解析（load_run 可能是 run 目录或 .pt 路径）。
+            # 旧录像的 model_dir 恒为 "?"（rsl_rl 1.0.2 无 model_file_path 属性）：
+            # 从 model_cli="<load_run>|<ckpt>" 兜底解析（load_run 可能是 run 目录或 .pt 路径）。
             _p, _, _it = str(meta.get("model_cli")).partition("|")
             _p = _p.strip()
             if _p and _p != "?":
@@ -127,7 +130,9 @@ def _run_start_epoch(run_id):
 
 def _config_from_run(tsv_name):
     """switch 日志 meta 只记了 4w/standup；两轮/趴下取自对应那次运行 spec.json 的四槽。"""
-    m = re.match(r"wbr_switch_tel(?:_isaac)?_(\d{8}-\d{6})", tsv_name)   # 兼容引擎标注（2026-11-06）
+    # Isaac_2_ 前缀优先；旧前缀（含 isaac 引擎标注）向后兼容
+    m = (re.match(r"Isaac_2_(\d{8}-\d{6})", tsv_name)
+         or re.match(r"wbr_switch_tel(?:_isaac)?_(\d{8}-\d{6})", tsv_name))
     if not m:
         return None
     log_epoch = _run_start_epoch(m.group(1))
@@ -154,8 +159,8 @@ def _config_from_run(tsv_name):
     out = []
     for role, key in (("四轮", "fourw"), ("起立", "standup"), ("两轮", "w3"), ("趴下", "lie")):
         if role == "起立" and smode in ("trad", "script"):
-            _lbl = "P7T 相位脚本（无权重）" if smode == "script" else "P7T 传统脚本链"
-            out.append({"role": "起立（传统）", "model": _lbl, "ckpt": "", "path": ""})
+            _lbl = "P7T2 相位脚本（无权重）" if smode == "script" else "P7T 传统脚本链"
+            out.append({"role": "起立（脚本）", "model": _lbl, "ckpt": "", "path": ""})
             continue
         p = slots.get(key)
         if not p or not isinstance(p, str):   # 起立槽可能写成 {"type":"script"}（相位脚本，无权重）

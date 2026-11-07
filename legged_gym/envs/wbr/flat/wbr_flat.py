@@ -3,7 +3,7 @@
 # Author    : SYH
 # File      : wbr_flat.py
 # Purpose   : 两轮 WBR 的环境本体：观测拼装、奖励、指令目标层（包络 / 压弯 / 限速）、
-#             跳跃相位机与遥测快照。基类为 LeggedRobot，flat4 / switch / uni 均由它派生。
+# 跳跃相位机与遥测快照。基类为 LeggedRobot，flat4 / switch / uni 均由它派生。
 # ==============================================================================
 
 import numpy as np
@@ -18,9 +18,9 @@ from .wbr_flat_config import WBRFlatCfg
 YAW_SIGN = -1.0
 
 # 三套高度口径，不要混读：
-#   起飞脉冲 h_flight_pred = max(air_vz, 0)² / 2g  → 用**质心**
-#   奖励 tracking_base_height / IK 几何高 / 蹲姿判定 → 用**机身**（腿伸量相对轮子）
-#   验收真跳高 → 用**轮底离地**（轮心 z − 轮半径，双轮同离地窗内的峰值）
+# 起飞脉冲 h_flight_pred = max(air_vz, 0)² / 2g  → 用**质心**
+# 奖励 tracking_base_height / IK 几何高 / 蹲姿判定 → 用**机身**（腿伸量相对轮子）
+# 验收真跳高 → 用**轮底离地**（轮心 z − 轮半径，双轮同离地窗内的峰值）
 # ⚠ 机身只占 35.7% 质量、会被腿伸缩抬起来 ⇒ 机身读数必须与"确认起飞 n/N"并读，不能当离地高度。
 COM_M = {"base": 2.5418, "thigh": 0.80815,
          "shank_l": 0.93138, "shank_r": 0.92691, "wheel": 0.55336}
@@ -98,10 +98,10 @@ def com_world_dz(quat, com_body):
 class WBRFlatMob(LeggedRobot):
     # 继承 LeggedRobot，实现 WBR 的奖励函数与观测构造。
     # ⚠ 上游 `_prepare_reward_function` 只遍历 `rewards.scales` 的键并统一 ×dt ⇒ **函数写了
-    #   但键不在 scales 里 = 整项静默不存在**；同名方法后定义的覆盖先定义的。
+    # 但键不在 scales 里 = 整项静默不存在**；同名方法后定义的覆盖先定义的。
     # 奖励项索引：终止安全(no_fly)｜指令跟踪(tracking_*)｜姿态平顺(orientation, lin_vel_z,
-    #   ang_vel_xy, wrong_way, no_moonwalk, *_action_rate)｜关节执行(z_adjust_leg, dof_*_limits,
-    #   torque_limits, torques)｜跳跃(jump_lift, jump_*, hip_reach)。权重见 config 的 scales。
+    # ang_vel_xy, wrong_way, no_moonwalk, *_action_rate)｜关节执行(z_adjust_leg, dof_*_limits,
+    # torque_limits, torques)｜跳跃(jump_lift, jump_*, hip_reach)。权重见 config 的 scales。
 
     def _reward_leg_action_rate(self):
         # 腿部沿用原始 action 空间中的平滑惩罚。
@@ -116,7 +116,7 @@ class WBRFlatMob(LeggedRobot):
             self.actions[:, self.wheel_indices] - self.last_actions[:, self.wheel_indices]
         ) * self.cfg.control.wheel_action_scale
         # 腾空／够地两段免罚：那两拍轮子没有附着力可言，罚轮速跳变＝向腾空姿态收税，
-        #   而这两拍正是 `jump_lift` 唯一的发放处（净和为负会被 only_positive_rewards 压成 0）。
+        # 而这两拍正是 `jump_lift` 唯一的发放处（净和为负会被 only_positive_rewards 压成 0）。
         return torch.sum(torch.square(target_delta), dim=1) * (
             ~self._jump_blocked("wheel_action_rate"))
 
@@ -202,11 +202,11 @@ class WBRFlatMob(LeggedRobot):
                                        self.knee_r_idx, -1.0)
 
         # 2. 侧倾参考＝指令 Roll。压弯偏置已由 `_update_turning_roll_targets` 合成进
-        #    `commands[:,6]`，这里不能再加第二次。
+        # `commands[:,6]`，这里不能再加第二次。
         roll_cmd = self.commands[:, 6]
 
         # 3. 侧倾差动 = 前馈 + 反馈。前馈增益随髋膝工况现算 δ = λ_eff·tan(φ)/(g_L+g_R)，
-        #    分母下限由 roll_gain_denom_floor 夹住，防膝目标打到限位。
+        # 分母下限由 roll_gain_denom_floor 夹住，防膝目标打到限位。
         actual_roll = self._body_roll()
         ls = self.cfg.rewards.shank_length
         g_l = ls * torch.abs(torch.sin(hip_l + self.dof_pos[:, self.knee_l_idx]))
@@ -217,13 +217,13 @@ class WBRFlatMob(LeggedRobot):
                  + self.cfg.rewards.K_roll_fb * (roll_cmd - actual_roll))
 
         # 4. 跳跃相位对称偏移（P6：模板由 _update_jump_phase 每控制步推进一次，这里只读 ⇒
-        #    谁调用本函数、调用几次都不影响相位时钟）
+        # 谁调用本函数、调用几次都不影响相位时钟）
         off_knee = torch.zeros_like(base_l)
         if getattr(self.cfg.rewards.flags, "enable_jump", False):
             off_knee = self._compute_jump_phase_offset()
 
         # 5. 合成 + 按各腿限位截断。⚠ **两个通道符号相反**：侧倾差动**同号**加两腿，
-        #    跳跃偏移**镜像**（左 +off、右 −off）——反了就变成一腿伸一腿折。
+        # 跳跃偏移**镜像**（左 +off、右 −off）——反了就变成一腿伸一腿折。
         target_l = torch.clamp(base_l + delta + off_knee,
                                self.dof_pos_limits[self.knee_l_idx, 0],
                                self.dof_pos_limits[self.knee_l_idx, 1])
@@ -269,7 +269,7 @@ class WBRFlatMob(LeggedRobot):
         _curve = getattr(j, "anchor_curve", None)
         if _curve is not None:
             # 平衡曲线锚：轮固定、系统质心落在轮正上方时，髋相对轮的水平偏移随腿长走
-            #   （L 越小蹲越深、x_ref 越大；L=0.38 全直时 x_ref=0）。避免冻结常数 0.098 那种前倾蹲。
+            # （L 越小蹲越深、x_ref 越大；L=0.38 全直时 x_ref=0）。避免冻结常数 0.098 那种前倾蹲。
             Lc = torch.clamp(L_star, 0.10, 0.380)
             x_ref = (_curve[0] * Lc ** 3 + _curve[1] * Lc ** 2
                      + _curve[2] * Lc + _curve[3])
@@ -278,12 +278,12 @@ class WBRFlatMob(LeggedRobot):
         else:
             x_ref = torch.full_like(L_ref, float(_axc))       # 写死常数
         # 锚点绕轮心前转 anchor_tilt_deg 度，抵消蹬地时机身被往后甩的俯仰：
-        #   x' = x·cosθ + L·sinθ，L' = L·cosθ − x·sinθ。模长不变 ⇒ 膝角不受影响，只有髋角前移。
-        # 【P8J4a】行进回合前跳：`anchor_tilt_deg_moving` 给 |cmd_vx|>moving_tilt_vx_gate 的回合
-        #   更大的前转角（蹬地反作用力前向分量 ↑ ⇒ 离地 vx↑ ⇒ 前跳距离↑）。门用 commands[:,0]
-        #   （**不用 is_jump_round**——它标的是站立回合，P8J2b 极性教训）。未给键＝逐字旧行为。
-        #   ⚠ tilt 进的是整条相位链（ph1-5 共用本次解算）⇒ ph3/4/5 髋目标同步前移，
-        #   落地姿态更前倾——行进翻倒带是本杠杆的重点守门项（预注册 ≤基线×1.25）。
+        # x' = x·cosθ + L·sinθ，L' = L·cosθ − x·sinθ。模长不变 ⇒ 膝角不受影响，只有髋角前移。
+        # 行进回合前跳：`anchor_tilt_deg_moving` 给 |cmd_vx|>moving_tilt_vx_gate 的回合
+        # 更大的前转角（蹬地反作用力前向分量 ↑ ⇒ 离地 vx↑ ⇒ 前跳距离↑）。门用 commands[:,0]
+        # （**不用 is_jump_round**——它标的是站立回合，见上极性坑）。未给键＝逐字基线行为。
+        # ⚠ tilt 进的是整条相位链（ph1-5 共用本次解算）⇒ ph3/4/5 髋目标同步前移，
+        # 落地姿态更前倾——行进翻倒带是本杠杆的重点守门项（预注册 ≤基线×1.25）。
         _tb = float(getattr(j, "anchor_tilt_deg", 0.0) or 0.0)
         _tm = getattr(j, "anchor_tilt_deg_moving", None)
         if _tm is not None:
@@ -354,8 +354,8 @@ class WBRFlatMob(LeggedRobot):
                                    self.W_stand)          # 两轮都实 = 站得住（与 _reward_no_moonwalk/探针同口径）
         airborne = n_ground == 0           # 两轮都空 = 真的腾空（一輪着地不算，防蹭地刷分）
         # ---- 轮底离地（真跳高口径）：轮底 = 轮心世界 z − 轮半径，逐拍算 ----
-        #   wheel_peak_min 在双轮同离地窗内锁存峰值；wheel_at_air 记离地首拍（零点自检）。
-        #   须在本拍 refresh 过 _rb_state（见 post_physics_step）。
+        # wheel_peak_min 在双轮同离地窗内锁存峰值；wheel_at_air 记离地首拍（零点自检）。
+        # 须在本拍 refresh 过 _rb_state（见 post_physics_step）。
         _wb = self._rb_state[:, self.feet_indices, 2] - self.cfg.rewards.wheel_radius
         self.wheel_clear = _wb.min(dim=1).values
         _w_first = airborne & (~self.wheel_latched)
@@ -425,7 +425,7 @@ class WBRFlatMob(LeggedRobot):
         self.crouch_credit_step[trig] = 0.0   # 本拍预蹲得分（奖励函数的发放量）
         self.z_body_min[trig] = z[trig]      # 绝对蹲到位判定：事件内机身最低点从触发拍起算
         # ---- 事件量采集：时间轴与绝对质心位置，只写不读 ----
-        #   t_cmd 恒为 0（触发拍＝时间零点）⇒ 不占缓冲。
+        # t_cmd 恒为 0（触发拍＝时间零点）⇒ 不占缓冲。
         self.ev_t[trig] = 0.0
         self.z_min[trig] = com_z[trig]
         self.t_min[trig] = 0.0
@@ -445,7 +445,7 @@ class WBRFlatMob(LeggedRobot):
         self.air_latched[trig] = False          # 离地首拍锁存：每跳重新计
         self.air_z[trig] = 0.0
         self.air_vz[trig] = 0.0
-        self.ev_fwd_pay[trig] = 0.0             # 【P8J5a】前跳奖每跳重新结清
+        self.ev_fwd_pay[trig] = 0.0             # 前跳奖每跳重新结清
         self.air_body_x[trig] = 0.0
         self.air_body_vx[trig] = 0.0
         self.air_body_z[trig] = 0.0
@@ -491,8 +491,8 @@ class WBRFlatMob(LeggedRobot):
         self.ref_k_r[trig] = self.dof_pos[trig, self.knee_r_idx]
 
         # ---- 2. 当前相位要求的腿伸量变化 ΔL（m），按冻结姿态解成膝角偏移 ----
-        #   cos(hip + k) = (L_ref + ΔL − Lt·cos hip) / Ls，自变量夹 ±1 ⇒ 几何极限处自然饱和；
-        #   ±acos 两支取离当前膝角最近的一支。
+        # cos(hip + k) = (L_ref + ΔL − Lt·cos hip) / Ls，自变量夹 ±1 ⇒ 几何极限处自然饱和；
+        # ±acos 两支取离当前膝角最近的一支。
         p = self.ph
         t = self.ph_t
         lt, ls = self.cfg.rewards.thigh_length, self.cfg.rewards.shank_length
@@ -504,13 +504,13 @@ class WBRFlatMob(LeggedRobot):
         # 顶到限位时置 ref_clamped，读数要打标。
         _abs_h_s = self._lerp_by_h(getattr(j, "crouch_abs_by_h", None))
         _abs_h = _abs_h_s if _abs_h_s is not None else float(getattr(j, "crouch_abs_height", 0.0))
-        # 【P8J3c】行进回合浅蹲（速度门控）：|cmd_vx| > moving_crouch_vx_gate 的回合改用更浅的
-        #   `crouch_abs_by_h_moving`。依据＝Step0 归因（`eval_runs/2026-11-02_P8J3保速基线/attr_tsv.py`：
-        #   蹲段机体减速主体＝模板后仰 ~20° 的运动学甩尾，蹲越深甩越多；锚点曲线本身只解释 1%）
-        #   ＋ P6 手册 v27 附记「蹲深不兑换高度」。P8J3a/3b 轮速跟随两连负（机体 dip 反而更深、
-        #   轮子烧胎滑移 ×3）⇒ 按批准计划 fallback 换模板侧杠杆，直接缩小甩尾幅度。
-        #   站立回合 / 未给键 ⇒ 逐字 1c 行为。ref_z 冻结自触发拍 ⇒ crouch_cmd 自动变浅，
-        #   cap/伺服/到位判据（g1 链）共用同一目标，无第二套口径。
+        # 行进回合浅蹲（速度门控）：|cmd_vx| > moving_crouch_vx_gate 的回合改用更浅的
+        # `crouch_abs_by_h_moving`。依据＝Step0 归因（`eval_runs/2026-11-02_P8J3保速基线/attr_tsv.py`：
+        # 蹲段机体减速主体＝模板后仰 ~20° 的运动学甩尾，蹲越深甩越多；锚点曲线本身只解释 1%）
+        # ＋ P6 手册 v27 附记「蹲深不兑换高度」。P8J3a/3b 轮速跟随两连负（机体 dip 反而更深、
+        # 轮子烧胎滑移 ×3）⇒ 按批准计划 fallback 换模板侧杠杆，直接缩小甩尾幅度。
+        # 站立回合 / 未给键 ⇒ 逐字 1c 行为。ref_z 冻结自触发拍 ⇒ crouch_cmd 自动变浅，
+        # cap/伺服/到位判据（g1 链）共用同一目标，无第二套口径。
         _abs_h_mov_s = self._lerp_by_h(getattr(j, "crouch_abs_by_h_moving", None))
         if _abs_h_mov_s is not None:
             _moving = self.commands[:, 0].abs() > float(getattr(j, "moving_crouch_vx_gate", 0.3))
@@ -529,10 +529,10 @@ class WBRFlatMob(LeggedRobot):
         _crouch_cmd_abs = crouch_cmd
         # 爬升曲线用五次 smootherstep：r = 6s⁵ − 15s⁴ + 10s³，两端速度与加速度都为 0（C2）。
         # 爬升可在相位 1 结束前到位（crouch_ramp_end < 1），余下拍数用来等停稳。
-        # 【P8J4c】行进回合更快预蹲：`crouch_ramp_end_moving` 给 |cmd_vx| 过门回合更陡的爬升
-        #   （0.60→0.42 ⇒ 爬升 0.45s→~0.32s），压缩预蹲掉速段（整事件最大净前进成本）。
-        #   站立回合逐字旧行为；到位判据/伺服/过深救助共用同一目标，无第二套口径。
-        #   风险＝伺服跟踪更陡参考的过冲 ⇒ g1 到位率是本轮守门读数。
+        # 行进回合更快预蹲：`crouch_ramp_end_moving` 给 |cmd_vx| 过门回合更陡的爬升
+        # （0.60→0.42 ⇒ 爬升 0.45s→~0.32s），压缩预蹲掉速段（整事件最大净前进成本）。
+        # 站立回合逐字基线行为；到位判据/伺服/过深救助共用同一目标，无第二套口径。
+        # 风险＝伺服跟踪更陡参考的过冲 ⇒ g1 到位率是本轮守门读数。
         ramp_end = float(getattr(j, "crouch_ramp_end", 1.0))
         _re_m = getattr(j, "crouch_ramp_end_moving", None)
         if _re_m is not None:
@@ -552,7 +552,7 @@ class WBRFlatMob(LeggedRobot):
         _band_tol = float(getattr(j, "crouch_hold_tol", 0.0) or 0.0)
         if (_abs_h_s is not None) and (_band_tol > 0.0):
             # 软停止带随机身目标动态：带 = [机身目标−tol, 机身目标+tol]（逐 env）。锁在带底 ⇒ 蹲底≈目标−tol。
-            #   带随**指令目标**（含 `crouch_sag_ff`）一起平移，否则带底仍落在 0.188（旧缺陷）。
+            # 带随**指令目标**（含 `crouch_sag_ff`）一起平移，否则带底仍落在 0.188（旧缺陷）。
             _hmin = _abs_h_s + _ff - _band_tol
             _hmax = _abs_h_s + _ff + _band_tol
             _band_on = True
@@ -583,7 +583,7 @@ class WBRFlatMob(LeggedRobot):
         self.z_body_min = torch.where(p == 1, torch.minimum(self.z_body_min, z),
                                             self.z_body_min)
         # 口径统一（预蹲一律看机身高度）：到位票与记账共用这个误差，ΔL 只当执行层接口。
-        #   `err_crouch_abs` 带符号：正＝还没蹲够（机身偏高）、负＝蹲过头；单位 m。
+        # `err_crouch_abs` 带符号：正＝还没蹲够（机身偏高）、负＝蹲过头；单位 m。
         self.err_crouch_abs = torch.where(
             p == 1, z - _abs_h,
             self.err_crouch_abs)
@@ -630,7 +630,7 @@ class WBRFlatMob(LeggedRobot):
         _air_hold = float(getattr(j, "air_hold_leg", 0.0))
         _air_hold_L = float(getattr(j, "air_hold_L", 0.0) or 0.0)
         # air_hold_joint = 1：相位 3 把腿长钉在起飞瞬间的腿长 L_air_hold（lift 帧冻结），
-        #   2R 解算出的关节角等于起飞那一帧 ⇒ 腿随机身一起走、PD 误差趋零、零刹车。
+        # 2R 解算出的关节角等于起飞那一帧 ⇒ 腿随机身一起走、PD 误差趋零、零刹车。
         # air_hold_L 走的是机身锚 L_ref，机身上升时 PD 会把脚按在机身下方，反作用力把机身压下去。
         # 0 = 用机身上的绝对腿长 air_hold_L 保持。
         _air_hold_joint = float(getattr(j, "air_hold_joint", 0.0) or 0.0)
@@ -638,16 +638,16 @@ class WBRFlatMob(LeggedRobot):
         if _air_hold_L > 0.0:
             if _air_follow != 0.0 and float(self.L_air_hold.max()) > 1e-6:
                 # 相位 3 腿长目标 = 起飞冻结腿长 + follow × 机身升高。
-                #   follow > 0 腿随机身伸长；follow < 0 升得越高收得越短；0 = 用绝对口径。
+                # follow > 0 腿随机身伸长；follow < 0 升得越高收得越短；0 = 用绝对口径。
                 _dz_air = z - self.air_body_z
                 _dh_air = (self.L_air_hold + _air_follow * _dz_air) - L_ref
             elif _air_hold_joint > 0.5 and float(self.L_air_hold.max()) > 1e-6:
                 _dh_air = self.L_air_hold - L_ref
             else:
                 # 相位3 绝对腿长目标（取自 `air_hold_L`）：整条 dh 链是相对触发基准的增量
-                # 【P8J5b】行进回合放松：`air_hold_L_moving` 给 |cmd_vx| 过门回合更长的空中
-                #   腿长目标（少收 15mm＝PD 压轮的「空中刹车」减弱——R72a/撤收腿对照的方向）。
-                #   land_hold_L 成对随动（见下 ph4），腾空→够地零行程不变；站立回合逐字不动。
+                # 行进回合放松：`air_hold_L_moving` 给 |cmd_vx| 过门回合更长的空中
+                # 腿长目标（少收 15mm＝PD 压轮的「空中刹车」减弱——R72a/撤收腿对照的方向）。
+                # land_hold_L 成对随动（见下 ph4），腾空→够地零行程不变；站立回合逐字不动。
                 _ahL = torch.full_like(z, _air_hold_L)
                 _ahLm = getattr(j, "air_hold_L_moving", None)
                 if _ahLm is not None:
@@ -669,8 +669,8 @@ class WBRFlatMob(LeggedRobot):
         _land_hold_L = float(getattr(j, "land_hold_L", 0.0) or 0.0)
         if _land_hold_L > 0.0:
             # 相位4 绝对腿长目标（= `land_hold_L`，够地好落地）
-            # 【P8J5b】与相位 3 成对随动：行进回合取 air_hold_L_moving（否则够地瞬间多出
-            #    \|差值\| 的伸腿台阶——probe --land-hold-l help 的成对约束）。
+            # 与相位 3 成对随动：行进回合取 air_hold_L_moving（否则够地瞬间多出
+            # \|差值\| 的伸腿台阶——probe --land-hold-l help 的成对约束）。
             _lhL = torch.full_like(z, _land_hold_L)
             _ahLm = getattr(j, "air_hold_L_moving", None)
             if _ahLm is not None:
@@ -713,9 +713,9 @@ class WBRFlatMob(LeggedRobot):
         self.ref_clamped[:] = star_clamped & (p > 0)
 
         # ---- 2a-bis. 空中腿长滑动窗：只记相位 3（腾空）的帧 ----
-        #   记两条腿竖直伸量的 max（不是均值）：轮底净空 = 机身高 − max(两腿伸量) − 轮半径，
-        #   用均值会让一条腿长把轮底吃掉而奖励照拿。窗长 leg_apex_win（默认 3 拍），
-        #   整窗都没过长才拿满分。非相位 3 的帧记 −1，不参与 max。
+        # 记两条腿竖直伸量的 max（不是均值）：轮底净空 = 机身高 − max(两腿伸量) − 轮半径，
+        # 用均值会让一条腿长把轮底吃掉而奖励照拿。窗长 leg_apex_win（默认 3 拍），
+        # 整窗都没过长才拿满分。非相位 3 的帧记 −1，不参与 max。
         _Ll = lt * torch.cos(self.dof_pos[:, self.hip_l_idx]) + ls * torch.cos(
             self.dof_pos[:, self.hip_l_idx] + self.dof_pos[:, self.knee_l_idx])
         _Lr = lt * torch.cos(self.dof_pos[:, self.hip_r_idx]) + ls * torch.cos(
@@ -726,7 +726,7 @@ class WBRFlatMob(LeggedRobot):
                                              torch.full_like(_Lmax_now, -1.0))
 
         # ---- 2b. 执行校验：腿**实际**到没到达模板要求的伸量 ----
-        #   L_act 用**实测髋＋膝**（不是冻结值）：髋被策略搬走也算没执行到位。
+        # L_act 用**实测髋＋膝**（不是冻结值）：髋被策略搬走也算没执行到位。
         hip_now = self.dof_pos[:, self.hip_l_idx]
         L_act = lt * torch.cos(hip_now) + ls * torch.cos(
             hip_now + self.dof_pos[:, self.knee_l_idx])
@@ -738,15 +738,15 @@ class WBRFlatMob(LeggedRobot):
                                                   torch.zeros_like(self.err_reach))
 
         # ---- 2f. 预蹲跟踪记账（奖励由 _reward_jump_crouch_track 逐拍发放）----
-        #   记在相位机而不是奖励函数里：本函数每控制步恰好一次，奖励函数会被探针重复调用。
-        #   口径 = 机身高度：_got_c 是实际下蹲量、_dem_c 是要求下蹲量。
+        # 记在相位机而不是奖励函数里：本函数每控制步恰好一次，奖励函数会被探针重复调用。
+        # 口径 = 机身高度：_got_c 是实际下蹲量、_dem_c 是要求下蹲量。
         _got_c = _crouch_cmd_abs - self.err_crouch_abs          # 机身口径：实际已下蹲多少 (m)
         _got_c = _got_c.clamp(min=0.0).clamp(max=_crouch_cmd_abs)
         _dem_c = torch.clamp(_crouch_cmd_abs, min=1e-3)
         _frac_c = torch.clamp(_got_c / _dem_c, 0.0, 1.0)
         _tgt_c = torch.clamp(_crouch_cmd_abs * ramp, min=1e-3)
         # 给分用**高斯**：矩形窗在边界处梯度是断的——差一点拿满分、
-        #   过一点拿 0，策略在那一侧收不到"再往回一点更好"的信号。σ = max(frac×要求, abs)，与脉冲项同构。
+        # 过一点拿 0，策略在那一侧收不到"再往回一点更好"的信号。σ = max(frac×要求, abs)，与脉冲项同构。
         _sig_c = torch.clamp(
             float(getattr(j, "crouch_sigma_frac", 0.0)) * _tgt_c,
             min=float(getattr(j, "crouch_sigma_abs", 0.008))).clamp(min=1.0e-4)
@@ -762,7 +762,7 @@ class WBRFlatMob(LeggedRobot):
 
 
         # ---- 2c. 模板偏移限速：爆发相位**不限速**（要的就是目标远跑在实测前面＝持续 PD
-        #   误差＝冲量），其余相位限速。`burst_rate_max`（rad/拍）0＝阶跃。
+        # 误差＝冲量），其余相位限速。`burst_rate_max`（rad/拍）0＝阶跃。
         rate = float(getattr(j, "off_rate_max", 0.0))
         brate = float(getattr(j, "burst_rate_max", 0.0))
         if rate > 0.0 or brate > 0.0:
@@ -800,7 +800,7 @@ class WBRFlatMob(LeggedRobot):
         self.off_hip = torch.where(p > 0, self.off_hip, torch.zeros_like(self.off_hip))
 
         # ---- 2d. 髋通道：可选叠加的纯旋转补偿（把轮子搬回髋正下方），
-        #   增益 0 时不写 `off_hip_comp`。
+        # 增益 0 时不写 `off_hip_comp`。
         gain = float(getattr(self.cfg.rewards.jump, "hip_comp_gain", 0.0))
         if gain != 0.0:
             lt, ls = self.cfg.rewards.thigh_length, self.cfg.rewards.shank_length
@@ -817,7 +817,7 @@ class WBRFlatMob(LeggedRobot):
                                                  torch.zeros_like(th))
 
         # ---- 2e. 离地首拍锁存：起飞窗口（相位 ≥ 2）内第一次两轮同空那一拍存下 z / vz ----
-        #   lift 要连续 confirm_steps 拍才认，取样点晚 1~2 拍；不锁存会把脉冲分子系统性压低。
+        # lift 要连续 confirm_steps 拍才认，取样点晚 1~2 拍；不锁存会把脉冲分子系统性压低。
         _air_first = airborne & (p >= 2) & (~self.air_latched)
         _com_vz_now = (com_z - self.com_z_prev) / dt
         self.com_vz_step = _com_vz_now   # 逐拍质心竖直速度（相位2 push_lead 用；在 com_z_prev 更新前差分 ⇒ 本拍值）
@@ -825,7 +825,7 @@ class WBRFlatMob(LeggedRobot):
         self.air_vz = torch.where(_air_first, _com_vz_now, self.air_vz)
         self.air_body_z = torch.where(_air_first, z, self.air_body_z)
         self.air_body_vz = torch.where(_air_first, vz, self.air_body_vz)
-        # 【P8J5a】前跳奖测量点：离地首拍锁存世界系 x/vx（dx = 触地拍 x − 此值）
+        # 前跳奖测量点：离地首拍锁存世界系 x/vx（dx = 触地拍 x − 此值）
         self.air_body_x = torch.where(_air_first, self.root_states[:, 0], self.air_body_x)
         self.air_body_vx = torch.where(_air_first, self.root_states[:, 7], self.air_body_vx)
         self.air_latched = self.air_latched | _air_first
@@ -876,19 +876,19 @@ class WBRFlatMob(LeggedRobot):
         self.t_apex = torch.where(_apex_now, self.ev_t, self.t_apex)
         self.h_push_cmd = torch.where(lift, self.air_z - self.z_cmd, self.h_push_cmd)
         # ① 预蹲：蹲到位 ∧ 停稳 ∧ 命令结束后保持够久，才交棒给爆发。
-        #   到位 = 机身高度进绝对目标 ± crouch_reach_tol；停稳 = |vz| ≤ crouch_vz_tol；
-        #   两者须连续 crouch_settle_steps 拍同时成立。兜底：t_crouch 保险丝、
-        #   过深救助（比目标低超过 crouch_deep_tol 立刻蹬）。
+        # 到位 = 机身高度进绝对目标 ± crouch_reach_tol；停稳 = |vz| ≤ crouch_vz_tol；
+        # 两者须连续 crouch_settle_steps 拍同时成立。兜底：t_crouch 保险丝、
+        # 过深救助（比目标低超过 crouch_deep_tol 立刻蹬）。
         _tol_c = float(j.crouch_reach_tol)
         _t_ramp = float(j.t_crouch) * float(getattr(j, "crouch_ramp_end", 1.0))
         _ok_c = (p0 == 1) & (self.err_crouch_abs.abs() <= _tol_c)
         _still = _ok_c & (torch.abs(vz) <= float(getattr(j, "crouch_vz_tol", 0.02)))
         self.cnt_settle = torch.where(_still, self.cnt_settle + 1,
                                       torch.zeros_like(self.cnt_settle))
-        # 【P8J5c】行进回合预蹲少等：`crouch_hold_time_moving` 给行进回合更短的保持地板
-        #   （0.10→0.05）。预蹲实测恒 0.55s＝ramp 0.45（掉速主体，P8J4c 动坡度已证否）＋
-        #   hold 0.10（纯等待地板，R78 后从未调过）；settle 门（|err|≤tol ∧ |vz|≤tol ×5 拍）
-        #   原样保留，继续兜下冲。站立回合逐字不动。
+        # 行进回合预蹲少等：`crouch_hold_time_moving` 给行进回合更短的保持地板
+        # （0.10→0.05）。预蹲实测恒 0.55s＝ramp 0.45（掉速主体，P8J4c 动坡度已证否）＋
+        # hold 0.10（纯等待地板，R78 后从未调过）；settle 门（|err|≤tol ∧ |vz|≤tol ×5 拍）
+        # 原样保留，继续兜下冲。站立回合逐字不动。
         _hold_t = float(getattr(j, "crouch_hold_time", 0.0))
         _ht_m = getattr(j, "crouch_hold_time_moving", None)
         if _ht_m is not None:
@@ -905,7 +905,7 @@ class WBRFlatMob(LeggedRobot):
         self.tick_crouch_ok = self.tick_crouch_ok | (_exit_c & _ok_c)
         self._jump_advance(_exit_c, 2)
         # ② 爆发 → 腾空：**只认真起飞**。保险丝到期仍未起飞也转腾空（让晚离地的小跳还有被确认的
-        #    机会），但跳跃奖励全挂在 `ev_takeoff` 上 ⇒ 没离地的失败跳一分钱拿不到。
+        # 机会），但跳跃奖励全挂在 `ev_takeoff` 上 ⇒ 没离地的失败跳一分钱拿不到。
         self._jump_advance((p0 == 2) & self.ev_takeoff & airborne, 3)
         self._jump_advance((p0 == 2) & (~self.ev_takeoff) & (tn >= j.t_push_max), 3)
         # ③ 腾空 → 够地：到顶点（vz≤0）或空中保险丝到期
@@ -919,7 +919,7 @@ class WBRFlatMob(LeggedRobot):
         self._jump_advance(touch, 5)
         self._jump_advance((p0 == 4) & (tn >= j.t_land_max), 5)
         # 4→5 交界锁存相位 4 出口腿长（相位 5 ease-out 的起点 L_entry），进相位 5 那一拍才写。
-        #   ref_L 本拍已按相位4 目标更新（见上方 _jump_2r_solve 后的 self.ref_L 赋值）。
+        # ref_L 本拍已按相位4 目标更新（见上方 _jump_2r_solve 后的 self.ref_L 赋值）。
         _to5 = touch | ((p0 == 4) & (tn >= j.t_land_max))
         self.ph5_L_entry = torch.where(_to5, self.ref_L, self.ph5_L_entry)
         # 落地窗（缓冲相位内）累计：法向力峰值 (N) 与相对体重的冲量 ∫|ΣFz − W|dt (N·s)。
@@ -937,10 +937,10 @@ class WBRFlatMob(LeggedRobot):
         self._jump_advance(_rec, 0)               # 缓冲结束 → 回常态
 
         # ---- 3' 逐事件锁存完成票 + 链式封顶门：前序没达标的，后继相位正分最多 +5%（leak）----
-        #   票一律用比值或几何误差，不用高斯误差分。`p` 是 self.ph 的视图、转移已就地改过它
-        #   ⇒ 入口相位用 p0，当前相位用 p。
+        # 票一律用比值或几何误差，不用高斯误差分。`p` 是 self.ph 的视图、转移已就地改过它
+        # ⇒ 入口相位用 p0，当前相位用 p。
         # ⚠ 顶点判据必须用相位计时器快照 tn_p3，不能用 tn：tn 是 self.ph_t 的别名，
-        #   _jump_advance 把 ph_t 就地清零后，转移帧上"本相位已过多久"恒为 0 ⇒ apex 永不成立。
+        # _jump_advance 把 ph_t 就地清零后，转移帧上"本相位已过多久"恒为 0 ⇒ apex 永不成立。
         apex = (p0 == 3) & (tn_p3 >= j.t_flight_min) & ((vz <= 0.0) | (tn_p3 >= j.t_flight_max))
         leak = float(getattr(j, "chain_leak", 0.05))
         shape_tol = float(getattr(j, "shape_tol", 0.02))
@@ -956,7 +956,7 @@ class WBRFlatMob(LeggedRobot):
         # 差分基准每拍接上当前质心高（复位/触发那一拍也接，避免开局假尖峰）
         self.com_z_prev[:] = com_z
         # 离地那一拍结算：`h_flight_pred`（离地后上升的预测值，**脉冲的钱**，分子取**质心口径**）
-        #   ＋ `h_pred`（接触段＋弹道，只作辅助诊断）。预测值≠实测 `h_flight`：兑现率随构型变化。
+        # ＋ `h_pred`（接触段＋弹道，只作辅助诊断）。预测值≠实测 `h_flight`：兑现率随构型变化。
         h_flight_pred = torch.clamp(self.air_vz, min=0.0) ** 2 / (2.0 * 9.81)
         self.h_pred[:] = torch.where(
             lift, self.h_push_cmd + torch.clamp(self.air_vz, min=0.0) ** 2 / (2.0 * 9.81),
@@ -983,19 +983,19 @@ class WBRFlatMob(LeggedRobot):
         self.gate_lift[:] = g1                                   # 离地脉冲专用门（只看预蹲票）
         self.gate12[:] = torch.where(p == 3, g1 * g2, torch.where(p >= 4, g1 * g2, torch.ones_like(g1)))
         # 相位 3/4/5 用 g1·g2（不含 g3），相位 2 用 g1，相位 0/1 用 1。
-        #   专供 `_reward_jump_shape_track`，让它去掉 g3 梯度、保留 R57 的 g1·g2 结构。
+        # 专供 `_reward_jump_shape_track`，让它去掉 g3 梯度、保留 R57 的 g1·g2 结构。
         # g3 落进 dbg：它是"顶点腿长票"这一环，收工时看一眼是否在动 —— 恒定不动说明门又关上了。
-        #   （`apex` 从未触发的 bug，见 :897 注释）。以后每轮收工都该看一眼它**是否在动**
-        #   —— 恒定不动 = 门又关上了（静默失效只看输出数字发现不了）。
+        # （`apex` 从未触发的 bug，见 :897 注释）。以后每轮收工都该看一眼它**是否在动**
+        # —— 恒定不动 = 门又关上了（静默失效只看输出数字发现不了）。
         self.dbg["g3"][:] = g3
         # ---- 顶点腿长奖的本拍乘子：相位 3→4 那一拍（顶点）一次结清 ----
-        #   目标 = self.ref_L（模板自己算出的腿长目标，与相位 3/4 模板同源、逐拍连续）；
-        #   测量 = 顶点前 leg_apex_win 拍的空中腿长滑动最大（两腿取 max = 绑定轮口径）；
-        #   形式 = 双边高斯 exp(−0.5·((L_peak − L_target)/σ)²)；
-        #   门 = 确认起飞 × 直立 × g1 × g2。不用 g3：g3 就是本项的布尔版，拿它当门会循环。
+        # 目标 = self.ref_L（模板自己算出的腿长目标，与相位 3/4 模板同源、逐拍连续）；
+        # 测量 = 顶点前 leg_apex_win 拍的空中腿长滑动最大（两腿取 max = 绑定轮口径）；
+        # 形式 = 双边高斯 exp(−0.5·((L_peak − L_target)/σ)²)；
+        # 门 = 确认起飞 × 直立 × g1 × g2。不用 g3：g3 就是本项的布尔版，拿它当门会循环。
         _lsig = float(getattr(j, "leg_apex_sigma", 0.0) or 0.0)
-        #   顶点掩码自己算一份、不复用共享的 apex：apex 依赖的 tn 会被就地清零（见上方说明），
-        #   共享值不可靠；本项只按自己算的掩码发奖。
+        # 顶点掩码自己算一份、不复用共享的 apex：apex 依赖的 tn 会被就地清零（见上方说明），
+        # 共享值不可靠；本项只按自己算的掩码发奖。
         _apex_my = ((p0 == 3) & (tn_p3 >= float(j.t_flight_min))
                     & ((vz <= 0.0) | (tn_p3 >= float(j.t_flight_max))))
         _Lpk = self.L_max_hist.max(dim=1).values
@@ -1013,10 +1013,10 @@ class WBRFlatMob(LeggedRobot):
         self.dbg["apex_leg_score"][:] = torch.where(_apex_my, _sc,
                                                     self.dbg["apex_leg_score"])
         # ---- 真跳高（轮底离地）结果奖：同一顶点帧（相位 4 起点）一次性结清 ----
-        #   奖励量 = wheel_peak_min（双轮同离地窗的轮底峰值，与判据同口径）；
-        #   目标 = top_height_goal_by_h 随指令插值的可达轮底（None 时回退指令 h_target）；
-        #   双边高斯，超调也扣。门 = 确认起飞 × 直立 × g1 × g2 × 真离过地。
-        #   不等触地再发，避免把"赖地不走"算进奖励。
+        # 奖励量 = wheel_peak_min（双轮同离地窗的轮底峰值，与判据同口径）；
+        # 目标 = top_height_goal_by_h 随指令插值的可达轮底（None 时回退指令 h_target）；
+        # 双边高斯，超调也扣。门 = 确认起飞 × 直立 × g1 × g2 × 真离过地。
+        # 不等触地再发，避免把"赖地不走"算进奖励。
         _thsig = float(getattr(j, "top_height_sigma", 0.0) or 0.0)
         _goal_by_h = self._lerp_by_h(getattr(j, "top_height_goal_by_h", None))
         _goal_src = _goal_by_h if _goal_by_h is not None else self.h_target
@@ -1042,20 +1042,20 @@ class WBRFlatMob(LeggedRobot):
         # 只在触地那一拍存下来当判据读。
         self.ev_land_frac[:] = torch.where(touch, land_frac, self.ev_land_frac)
         # ⚠⚠ 必须乘 `touch` 当**指示位**，不能只靠 `torch.where(touch, ...)` 锁存：锁存版
-        #   在事件走完后不清零，那一跳的钱会被每拍重复发到下一次触发。
+        # 在事件走完后不清零，那一跳的钱会被每拍重复发到下一次触发。
         self.ev_land_pay[:] = touch.float() * (
             self.ev_takeoff.float() * self._jump_reward_upright().float()
             * torch.clamp(1.0 - self.v_land / float(j.vz_landing_soft), 0.0, 1.0)
             * (leak + (1.0 - leak) * g1)
             * (leak + (1.0 - leak) * land_frac))
-        # ---- 【P8J5a】前跳奖：触地拍一次性结清「这次跳向前投送了多远」 ----
-        #   现行一次性项（lift/landing/top_height/leg_apex）无一管前向距离，腾空段水平速度
-        #   保持零激励 ⇒ 给「向前跳」定价。score = clamp(dx_air/0.15, 0, 1)（**绝对位移口径，
-        #   cap 150mm**）。为什么不用「保持率」口径（dx/(vx_lift×T)）：腾空窗内 base-vx 衰减
-        #   有收腿的运动学成分（CoM 未必丢速），保持率会惩罚必要的收腿（P8J5 计划 §5a）。
-        #   门＝touch **指示位**（:1010 教训）× 确认起飞 × 直立 × g1·g2（结算帧 gate_chain
-        #   已是 ph5 值，取 ev_land_pay 同款 leak 形）× |离地vx|>0.15（自然限定行进档——
-        #   站立回合 vx≈0 ⇒ dx≈0 ⇒ score≈0 本就不发钱，门是显式保险）。
+        # ---- 前跳奖：触地拍一次性结清「这次跳向前投送了多远」 ----
+        # 现行一次性项（lift/landing/top_height/leg_apex）无一管前向距离，腾空段水平速度
+        # 保持零激励 ⇒ 给「向前跳」定价。score = clamp(dx_air/0.15, 0, 1)（**绝对位移口径，
+        # cap 150mm**）。为什么不用「保持率」口径（dx/(vx_lift×T)）：腾空窗内 base-vx 衰减
+        # 有收腿的运动学成分（CoM 未必丢速），保持率会惩罚必要的收腿（P8J5 计划 §5a）。
+        # 门＝touch **指示位**（:1010 教训）× 确认起飞 × 直立 × g1·g2（结算帧 gate_chain
+        # 已是 ph5 值，取 ev_land_pay 同款 leak 形）× |离地vx|>0.15（自然限定行进档——
+        # 站立回合 vx≈0 ⇒ dx≈0 ⇒ score≈0 本就不发钱，门是显式保险）。
         _dx_air = self.root_states[:, 0] - self.air_body_x
         _fwd_sc = torch.clamp(_dx_air / 0.15, 0.0, 1.0)
         _fwd_mov = self.air_body_vx.abs() > 0.15
@@ -1112,7 +1112,7 @@ class WBRFlatMob(LeggedRobot):
         self.dbg["v_launch"][:] = self.v_launch
         self.dbg["h_body_lift"][:] = self.h_body_lift
         # 验收读数＝机身两条（`h_body_rise` 含预蹲深度、`h_body_lift`＝判据认的 `h_flight`）；
-        #   质心两条留作对照。⚠ 必须与"确认起飞 n/N"并读（见文件头【高度口径】）。
+        # 质心两条留作对照。⚠ 必须与"确认起飞 n/N"并读（见文件头【高度口径】）。
         self.dbg["h_cmd_apex"][:] = self.h_cmd_apex
         self.dbg["h_push_cmd"][:] = self.h_push_cmd
         self.dbg["v_land"][:] = self.v_land
@@ -1202,7 +1202,7 @@ class WBRFlatMob(LeggedRobot):
         # 静定门状态：参考高取"复位那一刻的高度"起步（留 0 会让 |z−ref| 永远超限 ⇒ 曝光静默归零）
         self.z_stand_ref[env_ids] = self.root_states[env_ids, 2]
         # 计数同样播种成已站定：复位位形就是默认站立位；留 0 会让只在复位后重采样的调用方
-        #   （play02/评测）永远被 `cmd_settle_gate` 挡死。
+        # （play02/评测）永远被 `cmd_settle_gate` 挡死。
         self.cnt_quiet[env_ids] = max(int(getattr(self.cfg.rewards.jump, "settle_steps", 10)), 1)
         self.ev_takeoff[env_ids] = False
         self.ev_takeoff_ever[env_ids] = False
@@ -1212,7 +1212,7 @@ class WBRFlatMob(LeggedRobot):
         self.air_z[env_ids] = 0.0
         self.air_vz[env_ids] = 0.0
         self.air_body_z[env_ids] = 0.0
-        self.ev_fwd_pay[env_ids] = 0.0          # 【P8J5a】
+        self.ev_fwd_pay[env_ids] = 0.0          # 
         self.air_body_x[env_ids] = 0.0
         self.air_body_vx[env_ids] = 0.0
         self.air_body_vz[env_ids] = 0.0
@@ -1253,19 +1253,19 @@ class WBRFlatMob(LeggedRobot):
         lateral_reward = torch.exp(-lateral_error / self.cfg.rewards.tracking_sigma)
         # 【激励侧】按相位掩蔽：预蹲/蹬地会把机体前后甩一下，这三项跟踪分在事件窗内不该计。
         # 掩蔽不等于免罚：这些拍两项都不给分，梯度就不站在"别蹲"那一边。
-        # 【P8J2b·择相跟随】【P8J3a 修极性】**行进回合（~is_jump_round）**在**蹬地段（相位2）**保留跟随：
-        #   基线实测（11-02 [15:45]）行进跳的唯一短板是 h0.15 档跳高损失 6~8.7 mm，
-        #   P8J2a 全程放开则伤站跳高档（0.10/0.15 一致 -4~6.6 mm，[16:20]）。
-        #   ⇒ 跟随梯度只在"边走边跳"的蹬地段给，站跳回合维持原掩蔽——站着跳没有 vx 可跟，
-        #     那份梯度纯属抢竖直冲量的功。腾空/够地（3/4）两态照旧掩蔽（空中改不了 vx）。
-        #   ⚠【11-02 [17:40] 勘误】2b 原实现写成 `& is_jump_round`，但 `is_jump_round` 在
-        #     `_resample_commands` 里标的是 vx 被强制置 0 的**站立回合**（`self.is_jump_round[ids] = jr`，
-        #     jr 回合 vx=ω=roll=0）——极性反了 ⇒ 2b 的跟随梯度全发给了站立回合，行进回合从未拿到，
-        #     2b「行进档与基线持平」实为 no-op 的假阳性。P8J3a 起改为 `& ~is_jump_round`。
+        # **行进回合（~is_jump_round）**在**蹬地段（相位2）**保留跟随：
+        # 基线实测：行进跳的唯一短板是 h0.15 档跳高损失 6~8.7 mm；全程放开则伤
+        # 站跳高档（0.10/0.15 档一致 -4~6.6 mm）。
+        # ⇒ 跟随梯度只在"边走边跳"的蹬地段给，站跳回合维持原掩蔽——站着跳没有 vx 可跟，
+        # 那份梯度纯属抢竖直冲量的功。腾空/够地（3/4）两态照旧掩蔽（空中改不了 vx）。
+        # ⚠ 极性：`is_jump_round` 在 `_resample_commands` 里标的是 vx 被强制置 0 的
+        # **站立回合**（`self.is_jump_round[ids] = jr`，jr 回合 vx=ω=roll=0）⇒ 跟随门必须配
+        # `& ~is_jump_round`；写成 `& is_jump_round` 会把跟随梯度全发给站立回合、行进回合
+        # 拿不到（no-op 假阳性）。
         _gate = ~self._jump_blocked("tracking_lin_vel")
         if bool(getattr(self.cfg.rewards.jump, "vx_follow_in_jump_round", False)):
             # 对**行进回合**子集摘掉**相位 2（蹬地）**的掩蔽：按相位号判断（不是 mask 向量——
-            #   bool 向量没有元素"等于 2"，`(vec == 2)` 恒 False，第一版就栽在这）。
+            # bool 向量没有元素"等于 2"，`(vec == 2)` 恒 False，第一版就栽在这）。
             _gate = _gate | ((self.ph == 2) & ~self.is_jump_round)
         return longitudinal_reward * lateral_reward * _gate
 
@@ -1280,7 +1280,7 @@ class WBRFlatMob(LeggedRobot):
 
     def _reward_tracking_wheel_lin_vel(self):
         # 轮速等效线速度必须乘 cos(俯仰) 才与 commands[:,0] 同口径：
-        #   v = r_w·(ω_L − ω_R)/2 · cosθ。不乘则两个速度跟踪项互相矛盾，轮速项会给抬头发钱。
+        # v = r_w·(ω_L − ω_R)/2 · cosθ。不乘则两个速度跟踪项互相矛盾，轮速项会给抬头发钱。
         wheel_lin_vel = 0.5 * self.cfg.rewards.wheel_radius * (
             self.dof_vel[:, self.wheel_l_idx] - self.dof_vel[:, self.wheel_r_idx]
         ) * torch.cos(self._body_pitch())
@@ -1294,17 +1294,17 @@ class WBRFlatMob(LeggedRobot):
         _gate = ~self._jump_blocked("tracking_wheel_lin_vel")
         _r = tracking_reward * both_wheels_contact * _gate
         if bool(getattr(self.cfg.rewards.jump, "wheel_follow_in_jump_round", False)):
-            # 【P8J3a/b·轮速跟随】**行进回合（~is_jump_round）**在事件窗指定相位保留轮速跟随。
-            #   归因（11-02 Step0，eval_runs/2026-11-02_P8J3保速基线/attr_tsv.py）：蹲段减速主体是
-            #   模板后仰 ~20° 的运动学甩尾（锚点曲线几何只解释 1%，Δx_ref 仅 ~1 mm）＋策略晚蹲段
-            #   「刹轮跟机」（slip→0、轮τ −0.17）＋蹬地段轮子倒转打滑（slip −0.62 m/s）。
-            #   base-vx 跟随在蹲段不可满足（后仰甩尾是运动学必然，ph1 髋被模板接管）⇒ 2a/2b 的
-            #   vx 跟随无效；但轮子转速完全可控——轮速跟随给「继续按指令速度滚」以显式梯度，
-            #   靠牵引力把质心速度带过事件窗。站立回合不受影响（维持父类全掩蔽 [1,2,3,4,5]）。
-            #   【P8J3b】相位表与事件窗增益做成 config（`wheel_follow_phases`/`wheel_follow_boost`）：
-            #   3a 实测 dip −10pp 后平台＋落地缓冲段回归（事件末 1.16→0.92×触发）⇒ 扩相位 5
-            #   （缓冲段轮子继续滚，消「落地后蹭地减速」）＋事件窗内增益 ×2（逐拍梯度 ~0.4 分/事件，
-            #   对 3000 分一次性项太弱，是 3a 平台的量级解释；增益只乘在事件窗子集，ph0 行走不变）。
+            # **行进回合（~is_jump_round）**在事件窗指定相位保留轮速跟随。
+            # 归因（11-02 Step0，eval_runs/2026-11-02_P8J3保速基线/attr_tsv.py）：蹲段减速主体是
+            # 模板后仰 ~20° 的运动学甩尾（锚点曲线几何只解释 1%，Δx_ref 仅 ~1 mm）＋策略晚蹲段
+            # 「刹轮跟机」（slip→0、轮τ −0.17）＋蹬地段轮子倒转打滑（slip −0.62 m/s）。
+            # base-vx 跟随在蹲段不可满足（后仰甩尾是运动学必然，ph1 髋被模板接管）⇒ 2a/2b 的
+            # vx 跟随无效；但轮子转速完全可控——轮速跟随给「继续按指令速度滚」以显式梯度，
+            # 靠牵引力把质心速度带过事件窗。站立回合不受影响（维持父类全掩蔽 [1,2,3,4,5]）。
+            # 相位表与事件窗增益做成 config（`wheel_follow_phases`/`wheel_follow_boost`）：
+            # 3a 实测 dip −10pp 后平台＋落地缓冲段回归（事件末 1.16→0.92×触发）⇒ 扩相位 5
+            # （缓冲段轮子继续滚，消「落地后蹭地减速」）＋事件窗内增益 ×2（逐拍梯度 ~0.4 分/事件，
+            # 对 3000 分一次性项太弱，是 3a 平台的量级解释；增益只乘在事件窗子集，ph0 行走不变）。
             _phases = tuple(getattr(self.cfg.rewards.jump, "wheel_follow_phases", (1, 2)))
             _inwin = torch.zeros_like(_gate)
             for _p in _phases:
@@ -1317,14 +1317,14 @@ class WBRFlatMob(LeggedRobot):
         return _r
 
     def _reward_wheel_no_brake(self):
-        # 【P8J4b·反刹车】行进回合预蹲/蹬地段：轮速落后于机体滚动需求才罚（**单边**），
-        #   轮速 ≥ 机体速度＝零罚——只摘「晚蹲刹轮」，不奖多转。为什么不是加大 wheel-follow：
-        #   3f 已证「奖多转」增益 ×2 即烧胎（轮快转、机体 dip 更深、站跳高档回退）；
-        #   单边罚只移除刹车的免费性，不制造超速激励。
-        #   分子口径：机体 vx（base 系，与轮等效速同系）− 轮等效速 > 0 的部分按 /0.2 归一；
-        #   门＝ph1-2 ＋ |cmd_vx|>moving_crouch_vx_gate（行进回合）＋双轮接地。
-        #   双保险读法：刹轮若只是无梯度伴生行为 ⇒ 被罚消失；若是策略对抗后仰甩尾的功能行为
-        #   ⇒ 策略付小罚保留，读数不动——两种结果都有信息量（预注册 §3 4b）。
+        # 行进回合预蹲/蹬地段：轮速落后于机体滚动需求才罚（**单边**），
+        # 轮速 ≥ 机体速度＝零罚——只摘「晚蹲刹轮」，不奖多转。为什么不是加大 wheel-follow：
+        # 3f 已证「奖多转」增益 ×2 即烧胎（轮快转、机体 dip 更深、站跳高档回退）；
+        # 单边罚只移除刹车的免费性，不制造超速激励。
+        # 分子口径：机体 vx（base 系，与轮等效速同系）− 轮等效速 > 0 的部分按 /0.2 归一；
+        # 门＝ph1-2 ＋ |cmd_vx|>moving_crouch_vx_gate（行进回合）＋双轮接地。
+        # 双保险读法：刹轮若只是无梯度伴生行为 ⇒ 被罚消失；若是策略对抗后仰甩尾的功能行为
+        # ⇒ 策略付小罚保留，读数不动——两种结果都有信息量（预注册 §3 4b）。
         cmd_vx = self.commands[:, 0]
         wheel_eq = 0.5 * self.cfg.rewards.wheel_radius * (
             self.dof_vel[:, self.wheel_l_idx] - self.dof_vel[:, self.wheel_r_idx]
@@ -1345,7 +1345,7 @@ class WBRFlatMob(LeggedRobot):
         return (has_motion_command & has_meaningful_motion & opposite_direction).float()
 
     def _reward_no_moonwalk(self):
-        """【P8W1b 2026-10-29 口径 v2】惩罚"两轮前后错位"（moonwalk 的直接定义）。
+        """惩罚"两轮前后错位"（moonwalk 的直接定义）。
 
         旧口径（罚左右髋/膝**关节和**不对称）有两个结构性问题（量化见主文档 §3.4 与
         10-29 进展日志 12:35 条）：
@@ -1364,7 +1364,7 @@ class WBRFlatMob(LeggedRobot):
         数据源：`_rb_state` 由 post_physics_step 开头 refresh（轮位置在腾空段也可用）。
         """
         # 两轮轮心位置（世界系）→ 机体系 x：用 base 的 yaw 四元数把世界系 xy 差转进机体系。
-        #   `quat_rotate_inverse` 作用在"世界系向量"上，轮心差是世界系向量 ⇒ 正确口径。
+        # `quat_rotate_inverse` 作用在"世界系向量"上，轮心差是世界系向量 ⇒ 正确口径。
         w_l = self._rb_state[:, self.feet_indices[0], 0:3]
         w_r = self._rb_state[:, self.feet_indices[1], 0:3]
         d_world = w_l - w_r                                   # (N,3)
@@ -1393,7 +1393,7 @@ class WBRFlatMob(LeggedRobot):
             + w_rate * torch.relu(torch.abs(e_dot) / ed_tol - 1.0)
 
         # 腾空/够地段免罚（掩蔽表 [2,3,4]）+ roll 豁免；行走段（ph=0）口径如上。
-        # 【P8W9】地形落差被动腾空同样免罚：落差边缘两轮前后错开是几何必然，不是 moonwalk。
+        # 地形落差被动腾空同样免罚：落差边缘两轮前后错开是几何必然，不是 moonwalk。
         return (pen * (~roll_command_active) * (~self._jump_blocked("no_moonwalk"))
                 * (~self._terrain_flight_blocked("no_moonwalk")))
 
@@ -1474,7 +1474,7 @@ class WBRFlatMob(LeggedRobot):
         penalty = is_flying.float()
 
         # 4. 依然保留白名单：只有**允许离地的那几段**（爆发/腾空/够地）才免罚
-        #    【P6 S1】旧写法是整个事件窗免罚 ⇒ 预蹲/缓冲两段"轮子蹭地"也跟着免了
+        # 【P6 S1】旧写法是整个事件窗免罚 ⇒ 预蹲/缓冲两段"轮子蹭地"也跟着免了
         return ((~self._jump_blocked("no_fly")) * penalty
                 * (~self._terrain_flight_blocked("no_fly")))
 
@@ -1483,13 +1483,13 @@ class WBRFlatMob(LeggedRobot):
         z_vel_sq = torch.square(self.base_lin_vel[:, 2])
         rew = z_vel_sq.clone()
         # 2. 判定是否正在主动升降底盘
-        #    口径可切（rewards.lin_vel_z_height_from_legs）：
-        #    - True（新口径）：用**腿伸量**+轮半径。与 `_reward_tracking_base_height` 同源，
-        #      语义正确：腿伸量偏离体高目标 ⇒ 正在主动升降底盘 ⇒ 竖直速度免罚。
-        #      起伏地形上 root_z 会随地面波动，旧口径的掩码会随机开关，把惩罚变成噪声。
-        #    - False（原口径）：`root_z − measured_heights`。
-        #      平地下 measured_heights ≡ 0 ⇒ 退化成"root_z 与体高指令比大小"，掩码基本恒真。
-        #    ⚠ 热启动 W12 权重时必须用原口径（False）：换口径等于改奖励分布，会让速度跟踪反向、训练崩。
+        # 口径可切（rewards.lin_vel_z_height_from_legs）：
+        # - True（新口径）：用**腿伸量**+轮半径。与 `_reward_tracking_base_height` 同源，
+        # 语义正确：腿伸量偏离体高目标 ⇒ 正在主动升降底盘 ⇒ 竖直速度免罚。
+        # 起伏地形上 root_z 会随地面波动，旧口径的掩码会随机开关，把惩罚变成噪声。
+        # - False（原口径）：`root_z − measured_heights`。
+        # 平地下 measured_heights ≡ 0 ⇒ 退化成"root_z 与体高指令比大小"，掩码基本恒真。
+        # ⚠ 热启动 W12 权重时必须用原口径（False）：换口径等于改奖励分布，会让速度跟踪反向、训练崩。
         if getattr(self.cfg.rewards, "lin_vel_z_height_from_legs", False):
             current_height = self._leg_extension() + self.cfg.rewards.wheel_radius
         else:
@@ -1503,13 +1503,13 @@ class WBRFlatMob(LeggedRobot):
         rew[mask_adjusting] = 0.0
 
         # 模式 B：跳跃相位表允许 vertical motion 的那几段**免罚**（掩蔽统一走 mask 表，
-        #   避免这里和模式 A 各写一套口径）
+        # 避免这里和模式 A 各写一套口径）
         rew[self._jump_blocked("lin_vel_z")] = 0.0
 
         # 模式 C：平地滚动时 (自然保留 rew 为正的 z_vel_sq，配合 config 负系数变成扣分)
 
-        # 模式 D【P8W9】：地形落差被动腾空段免罚。自由落体的 vz 不是"竖直跳动"误差，
-        #   罚它等于要求策略"别掉下去"，与下台阶任务直接对立。
+        # 模式 D：地形落差被动腾空段免罚。自由落体的 vz 不是"竖直跳动"误差，
+        # 罚它等于要求策略"别掉下去"，与下台阶任务直接对立。
         rew[self._terrain_flight_blocked("lin_vel_z")] = 0.0
 
         return rew
@@ -1533,7 +1533,7 @@ class WBRFlatMob(LeggedRobot):
         j = self.cfg.rewards.jump
         goal = torch.clamp(self.h_target, min=float(getattr(j, "goal_floor", 0.005)))
         # 分子是**高斯带通** `exp(−(h−goal)²/2σ²)`（有 0.5 口径，σ 是标准差）：自带上界 1，
-        #   且超调越多扣得越多。σ = max(`pulse_sigma_frac`×指令, `pulse_sigma_abs`)。
+        # 且超调越多扣得越多。σ = max(`pulse_sigma_frac`×指令, `pulse_sigma_abs`)。
         sig_frac = float(getattr(j, "pulse_sigma_frac", 0.0))
         sig_abs = float(getattr(j, "pulse_sigma_abs", 0.0))
         if sig_frac > 0.0 or sig_abs > 0.0:
@@ -1541,8 +1541,8 @@ class WBRFlatMob(LeggedRobot):
             h_flight_pred = self.h_flight_pred
             z = (h_flight_pred - goal) / sigma
             # 口径：单边高斯 exp(−0.5·clamp(z, max=0)²)，σ 固定（不随指令缩放，否则高档梯度太小）。
-            #   够到 goal 即满分、超了不罚 —— jump_lift 只负责"确保起飞"，
-            #   "越高越好"交给双边的 jump_top_height。
+            # 够到 goal 即满分、超了不罚 —— jump_lift 只负责"确保起飞"，
+            # "越高越好"交给双边的 jump_top_height。
             score = torch.exp(-0.5 * torch.clamp(z, max=0.0) ** 2)
         else:
             score = torch.clamp(h_flight_pred / goal, max=1.0)   # 回退锚：P6R21 前的线性比例
@@ -1615,7 +1615,7 @@ class WBRFlatMob(LeggedRobot):
         goal = torch.clamp(self.h_target, min=float(getattr(j, "goal_floor", 0.005)))
         v_req = torch.sqrt(2.0 * 9.81 * goal)          # 指令＝离地后上升 ⇒ √(2g·h*) 就是所需离场速度
         # 分子也是高斯带通 `exp(−e²/2σ²)`（有 0.5 口径），σ_v = `push_sigma_frac`×v_req。
-        #   σ=0 时退回 clamp(v_z / v_req, 0, 1)。
+        # σ=0 时退回 clamp(v_z / v_req, 0, 1)。
         _sig = float(getattr(j, "push_sigma_frac", 0.0))
         _vz_com = self.com_vz_step                # 质心口径：真实上冲动量，不含「伸腿甩机身」那份
         if _sig > 0.0:
@@ -1644,7 +1644,7 @@ class WBRFlatMob(LeggedRobot):
         return self.ev_land_pay
 
     def _reward_jump_forward(self):
-        """【P8J5a】前跳奖：触地那一拍**一次结清**「向前投送量」。
+        """前跳奖：触地那一拍**一次结清**「向前投送量」。
         门＝确认起飞 × 直立门 × g1·g2 × 行进档（离地 vx 绝对值 >0.15）；位移分 cap 150mm。
         管道与 `_reward_jump_landing` 同款（ev_fwd_pay 相位机算好，这里只读——幂等）。
         """
@@ -1662,7 +1662,7 @@ class WBRFlatMob(LeggedRobot):
         self.theta_left = self.dof_pos[:, self.knee_l_idx]
 
         # 刷新刚体状态张量：`_update_jump_phase`（在父类 post_physics_step 的回调里推进）要读
-        #   `_rb_state` 算轮底离地，必须在父类回调之前刷新，否则读到上一拍。
+        # `_rb_state` 算轮底离地，必须在父类回调之前刷新，否则读到上一拍。
         self.gym.refresh_rigid_body_state_tensor(self.sim)
 
         super().post_physics_step()
@@ -1755,7 +1755,7 @@ class WBRFlatMob(LeggedRobot):
         expand = getattr(env_cfg, "expand", 1.0)
         v_tgt = self.command_targets[ids, 0]
         # 包络输入是**原始指令** `command_raw_yaw`，不是 `command_targets[:,2]`：
-        #   ⇒ **包络永远从"指令"算，不从上一次的"目标"算**。
+        # ⇒ **包络永远从"指令"算，不从上一次的"目标"算**。
         w_tgt = self.command_raw_yaw[ids]
         # 带帽直线 ω ≤ expand·(b − k·|v|)：低速不削、满速端削
         cap = expand * (getattr(env_cfg, "yaw_taper_b", 2.14)
@@ -1797,7 +1797,7 @@ class WBRFlatMob(LeggedRobot):
         allow_l = self._hip_allow_ceiling(h_tgt, self.knee_l_idx, +1.0) - margin
         allow_r = self._hip_allow_ceiling(h_tgt, self.knee_r_idx, -1.0) - margin
         # `_hip_allow_ceiling` 返回**正**角度（没用 sign 参数）而右髋 `dof_pos` 是负的 ⇒ 必须按
-        #   **|髋|** 比较；旧写法 `relu(hip_r − allow_r)` 自变量恒为负，右髋从来没被罚过。
+        # **|髋|** 比较；旧写法 `relu(hip_r − allow_r)` 自变量恒为负，右髋从来没被罚过。
         over = torch.relu(torch.abs(self.dof_pos[:, self.hip_l_idx]) - allow_l) \
              + torch.relu(torch.abs(self.dof_pos[:, self.hip_r_idx]) - allow_r)
         # 诊断（P5 R7 ④）：先记"髋撑不起当前高度目标"的原始越限标记，**不受速度门控影响**，
@@ -1810,7 +1810,7 @@ class WBRFlatMob(LeggedRobot):
         gate = getattr(self.cfg.rewards, "hip_reach_speed_gate", 0.0)
         if gate > 0.0:
             over = over * (torch.abs(self.commands[:, 0]) <= gate)
-        # 【P8W9】地形落差被动腾空：腿已离开地面，髋可达性没有意义，免罚。
+        # 地形落差被动腾空：腿已离开地面，髋可达性没有意义，免罚。
         return ((~self._jump_blocked("hip_reach")) * over
                 * (~self._terrain_flight_blocked("hip_reach")))
 
@@ -1843,7 +1843,7 @@ class WBRFlatMob(LeggedRobot):
         return self.terrain_state == self.TERRAIN_FLIGHT
 
     def _reward_drop_extend(self):
-        """【P8W9 2026-11-05】落差腾空段奖励"伸腿探地"：腿伸量超过参考值的部分逐拍给分。
+        """落差腾空段奖励"伸腿探地"：腿伸量超过参考值的部分逐拍给分。
 
         物理依据：竖直墙面下落 15 cm 需 0.175 s，腿若能把轮子多伸出 5~7 cm，
         有效落差降到 6~10 cm，落地 `|vz|` 从 1.7 m/s 降到 1.1~1.4 m/s。
@@ -1858,7 +1858,7 @@ class WBRFlatMob(LeggedRobot):
         return excess * self._terrain_flight().float()
 
     def _reward_drop_absorb(self):
-        """【P8W9】落地窗口内奖励"收腿吸收"：腿伸量下降速率（m/s）的正部分。
+        """落地窗口内奖励"收腿吸收"：腿伸量下降速率（m/s）的正部分。
 
         与 `_reward_drop_extend` 配对：空中伸出去、落地收回来。只在 LANDING 的
         0.15 s 窗口内发放，窗口外恒 0。
@@ -2010,11 +2010,11 @@ class WBRFlatMob(LeggedRobot):
             self.command_targets[env_ids, 2] *= turning_mask & meaningful_yaw
 
         # 记下**原始偏航指令**（未经包络）：`_apply_command_envelope` 从这里取输入 ⇒
-        #   目标层是"指令的函数"而不是"上一拍目标的函数"。
+        # 目标层是"指令的函数"而不是"上一拍目标的函数"。
         self.command_raw_yaw[env_ids] = self.command_targets[env_ids, 2]
 
         # 事件窗内（`ph > 0`）不覆盖跳跃通道：观测喂活指令、结算用触发拍冻结的 `h_target`，
-        #   中途改写会让两者分叉。其余六个通道照常重采。
+        # 中途改写会让两者分叉。其余六个通道照常重采。
         _busy = self.ph[env_ids] > 0
         _h_prev = self.command_targets[env_ids, 4].clone()
         # 清除之前的跳跃/高度/roll 目标，再重新采样
@@ -2051,7 +2051,7 @@ class WBRFlatMob(LeggedRobot):
         l, r = self.command_ranges["jump_height"]
         jump_heights = torch.rand(len(env_ids), 1, device=self.device) * (r - l) + l
         # **跳跃回合子集每次重采样重新抽**，不固定到某个环境（永久划分会让那批环境永远只
-        #   练站立跳跃）。跳跃回合发：vx=ω=roll=0 ＋ 高度取 `jump_stand_height` ＋ 必发跳跃指令。
+        # 练站立跳跃）。跳跃回合发：vx=ω=roll=0 ＋ 高度取 `jump_stand_height` ＋ 必发跳跃指令。
         jr = torch.rand(len(env_ids), device=self.device) < getattr(cmd, "jump_stand_ratio", 0.0)
         if bool(jr.any()):
             self.command_targets[env_ids[jr], 0] = 0.0    # vx
@@ -2068,7 +2068,7 @@ class WBRFlatMob(LeggedRobot):
             & (torch.abs(base_rolls.squeeze(1)) <= cmd.jump_roll_gate)
             # 指令侧站定门·高度：体高指令必须落在 [jump_cmd_h_min, jump_cmd_h_max]。
             # ⚠ 实测侧（quiet_now 那一项）刻意不加绝对带：预蹲会把 z 压到带外，
-            #   加了会导致跳一次之后永久不再发指令。
+            # 加了会导致跳一次之后永久不再发指令。
             & (self.command_targets[env_ids, 5] >= cmd.jump_cmd_h_min)
             & (self.command_targets[env_ids, 5] <= cmd.jump_cmd_h_max)
         )
@@ -2162,7 +2162,7 @@ class WBRFlatMob(LeggedRobot):
         )
 
         # 跳跃指令归一化到 0~1（按量程 `j_hi`）：沿用 height_measurements=5.0 时观测只有
-        #   0.05~0.10、与"不发跳"(0) 差不到 0.1 ⇒ 网络分不出该不该跳而模板已经在动膝。
+        # 0.05~0.10、与"不发跳"(0) 差不到 0.1 ⇒ 网络分不出该不该跳而模板已经在动膝。
         j_hi = max(self.cfg.commands.ranges.jump_height[1], 1.0e-6)
 
         # 构建基础观测 (33维)
@@ -2201,21 +2201,21 @@ class WBRFlatMob(LeggedRobot):
             self.obs_buf = torch.cat((self.obs_buf, heights), dim=-1)
 
         # 跳跃相位块 8 维追加在**最末尾**(153:161)：旧 153 列一列不挪 ⇒ 热启动只需补 8 个零列。
-        #   内容＝相位 one-hot 6 ＋ 模板膝偏移 1 ＋ 升高进度 1。不按 `enable_jump` 关闭。
+        # 内容＝相位 one-hot 6 ＋ 模板膝偏移 1 ＋ 升高进度 1。不按 `enable_jump` 关闭。
         j_jump = self.cfg.rewards.jump
         phase_one_hot = torch.stack(
             [(self.ph == k).float() for k in range(6)], dim=1)
         off_col = (self.off_knee / max(float(j_jump.off_limit), 1.0e-6)).unsqueeze(1)
         goal_col = torch.clamp(self.h_target, min=float(j_jump.goal_floor))
         # "跳到哪儿了"＝离地后**质心**上升 ÷ `h_target`，零点＝离地首拍质心高；没离地给 0（含接触段会把
-        #   "顶高"读成进度）。与奖励分子同口径（质心）。
+        # "顶高"读成进度）。与奖励分子同口径（质心）。
         prog_col = (torch.clamp(
             (self._system_com_z() - self.air_z) / goal_col, 0.0, 1.0)
             * (self.ph > 0).float() * self.air_latched.float()).unsqueeze(1)
         self.obs_buf = torch.cat((self.obs_buf, phase_one_hot, off_col, prog_col), dim=-1)
 
         # 观测延迟（逐 env）：当前完整观测压入环形缓冲，按各 env 档位取旧帧。
-        #   延迟档全 0 时取到 buf[:,0]==当前帧，逐位不变。
+        # 延迟档全 0 时取到 buf[:,0]==当前帧，逐位不变。
         if getattr(self, "_dr_obs_delay", None) is not None:
             od = int(getattr(self.cfg.domain_rand, "obs_delay_max_steps", 0))
             if od > 0:
@@ -2253,13 +2253,13 @@ class WBRFlatMob(LeggedRobot):
         actions_scaled[:, self.wheel_indices] = self.wheel_target_vel
 
         # 跳跃模板的**物理授权**：相位偏移加进真正下发给 PD 的膝角目标，不只是奖励目标。
-        #   `action_authority` 是交接旋钮（1.0＝模板驱动腿、0.0＝全交给策略）。
+        # `action_authority` 是交接旋钮（1.0＝模板驱动腿、0.0＝全交给策略）。
         if getattr(self.cfg.rewards.flags, "enable_jump", False):
             authority = getattr(self.cfg.rewards.jump, "action_authority", 0.0)
             if authority > 0.0:
                 off = authority * self.off_knee
                 # `authority_mode="override"`：指定相位里膝的物理目标**直接等于**模板绝对角，
-                #   策略的腿动作项整列丢掉；覆盖段之外仍走加性叠加。
+                # 策略的腿动作项整列丢掉；覆盖段之外仍走加性叠加。
                 ovm = torch.zeros_like(off, dtype=torch.bool)
                 hip_done = False
                 if str(getattr(self.cfg.rewards.jump, "authority_mode", "additive")) == "override":
@@ -2300,7 +2300,7 @@ class WBRFlatMob(LeggedRobot):
                     actions_scaled[:, self.knee_l_idx] += off  # 镜像：左 + 右 −，见上面的 P6 符号说明
                     actions_scaled[:, self.knee_r_idx] -= off
                 # 髋通道（additive 或 override 未覆盖到髋时）：两自由度解出的髋偏移（竖直行程来源）
-                #   ＋ 可选的旧补偿（默认增益 0）＋ 俯仰反馈（**必须按相位门住**）。
+                # ＋ 可选的旧补偿（默认增益 0）＋ 俯仰反馈（**必须按相位门住**）。
                 if not hip_done:
                     hoff = authority * self.off_hip
                     hcg = float(getattr(self.cfg.rewards.jump, "hip_comp_gain", 0.0))
@@ -2319,14 +2319,14 @@ class WBRFlatMob(LeggedRobot):
                     actions_scaled[:, self.hip_r_idx] -= hoff
 
         # 跳跃相位专用膝阻尼：给相位 1 / 3 / 4 / 5 的环境加，行走 / 高度 / 侧倾不受影响。
-        #   压住腾空与落地前那记快速伸腿；相位 2（爆发）不加，避免吃掉爆发扭矩。
-        #   注意 d_gains[i] 是按自由度的标量而补偿要按环境 ⇒ 膝这两列做成 [n] 向量。
+        # 压住腾空与落地前那记快速伸腿；相位 2（爆发）不加，避免吃掉爆发扭矩。
+        # 注意 d_gains[i] 是按自由度的标量而补偿要按环境 ⇒ 膝这两列做成 [n] 向量。
         dext = getattr(self.cfg.rewards.jump, "knee_damp_extra", 0.0)
         d_col = [self.d_gains[i] for i in range(self.num_dof)]
         if getattr(self.cfg.rewards.flags, "enable_jump", False):
             # knee_damp_extra 支持 5 维数组 index0..4 = 相位 1..5 的膝阻尼增量
             # （标量则只作用于相位 1/3/4/5）。
-            #   按环境取对应相位增量；D 加 `clamp(min=0)` 防负阻尼（负阻尼＝往关节注能量、会炸）。
+            # 按环境取对应相位增量；D 加 `clamp(min=0)` 防负阻尼（负阻尼＝往关节注能量、会炸）。
             if isinstance(dext, (list, tuple)):
                 _dv = torch.tensor((list(dext) + [0.0] * 5)[:5], device=self.device)
                 _de = _dv[(self.ph - 1).clamp(min=0, max=4).long()] * (self.ph > 0).float()
@@ -2337,8 +2337,8 @@ class WBRFlatMob(LeggedRobot):
                 d_col[self.knee_r_idx] = torch.clamp(self.d_gains[self.knee_r_idx] + _de, min=0.0)
 
         # 爆发相位（相位 2）专用膝 P 增益：加大位置刚度 ⇒ 同一段行程给出更大的力矩冲量。
-        #   只加相位 2：相位 1 预蹲是 override 物理强制，加大 P 会让蹲过头；髋不是瓶颈，不动。
-        #   注意 p_gains[i] 是按自由度的标量而补偿要按环境 ⇒ 膝这两列做成 [n] 向量。
+        # 只加相位 2：相位 1 预蹲是 override 物理强制，加大 P 会让蹲过头；髋不是瓶颈，不动。
+        # 注意 p_gains[i] 是按自由度的标量而补偿要按环境 ⇒ 膝这两列做成 [n] 向量。
         kp_ex = getattr(self.cfg.rewards.jump, "knee_kp_extra", 0.0)
         p_col = [self.p_gains[i] for i in range(self.num_dof)]
         if getattr(self.cfg.rewards.flags, "enable_jump", False):
@@ -2439,9 +2439,9 @@ class WBRFlatMob(LeggedRobot):
 
 
         # ---- 轮底离地量（真跳高口径）：acquire 刚体状态张量，每控制步 refresh ----
-        #   wheel_clear   = 左右轮底（轮心世界 z − 轮半径）的较小者，逐拍
-        #   wheel_peak_min = 双轮同离地窗内 wheel_clear 的峰值（本跳锁存）
-        #   wheel_at_air  = 离地首拍的轮底（零点自检，应 ≈0）
+        # wheel_clear   = 左右轮底（轮心世界 z − 轮半径）的较小者，逐拍
+        # wheel_peak_min = 双轮同离地窗内 wheel_clear 的峰值（本跳锁存）
+        # wheel_at_air  = 离地首拍的轮底（零点自检，应 ≈0）
         _rb = self.gym.acquire_rigid_body_state_tensor(self.sim)
         self._rb_state = gymtorch.wrap_tensor(_rb).view(self.num_envs, self.num_bodies, 13)
         self.wheel_clear = torch.zeros(self.num_envs, dtype=torch.float, device=self.device, requires_grad=False)
@@ -2538,8 +2538,8 @@ class WBRFlatMob(LeggedRobot):
         self.is_jump_round = torch.zeros(
             self.num_envs, dtype=torch.bool, device=self.device, requires_grad=False
         )   # 本指令窗是否被抽进"跳跃回合子集"（`_resample_commands` 里按 jump_stand_ratio 重抽）
-        #   连跳**只对这批环境开放**——行走环境即使拿到跳跃指令也仍一窗一次，免得又把行走策略
-        #   搅扰（S1 的病）。
+        # 连跳**只对这批环境开放**——行走环境即使拿到跳跃指令也仍一窗一次，免得又把行走策略
+        # 搅扰（S1 的病）。
         self.rearm_cnt = torch.zeros(
             self.num_envs, dtype=torch.long, device=self.device, requires_grad=False
         )   # 本指令窗已额外重装填几次（重采样时清零）
@@ -2549,12 +2549,12 @@ class WBRFlatMob(LeggedRobot):
         self.arm_at = torch.zeros(
             self.num_envs, dtype=torch.long, device=self.device, requires_grad=False
         )   # 【P6R35】本窗**装填那一刻**的 episode 步号。`arm_delay` 改从此刻起算
-            #   ⇒ 高度指令先落地、等 2s 才允许触发（原语义判 episode_length_buf 是**回合**时间，
-            #   回合中段重采样时早已过 200 拍 ⇒ 指令一下发当拍就能跳，高度还没追上）。
+            # ⇒ 高度指令先落地、等 2s 才允许触发（原语义判 episode_length_buf 是**回合**时间，
+            # 回合中段重采样时早已过 200 拍 ⇒ 指令一下发当拍就能跳，高度还没追上）。
         self.h_request = torch.zeros(
             self.num_envs, dtype=torch.float, device=self.device, requires_grad=False
         )   # 【P6R36】本窗"请求的跳跃高度"(m)：站立期不进观测（command_targets[:,4] 保持0，防泄漏）；
-            #   触发那一拍才写入 command_targets[:,4] 并冻结 h_target，跳完清零
+            # 触发那一拍才写入 command_targets[:,4] 并冻结 h_target，跳完清零
         self.cnt_settle = torch.zeros(
             self.num_envs, dtype=torch.long, device=self.device, requires_grad=False
         )   # 【P6R78】相位1内"到位 ∧ 停稳"的**连续**拍数（相位机出口判据；旧 cnt_band 更名）
@@ -2575,8 +2575,8 @@ class WBRFlatMob(LeggedRobot):
         self.ref_k_r = torch.zeros(
             self.num_envs, dtype=torch.float, device=self.device, requires_grad=False
         )   # 触发瞬间冻结的**右**膝角 (rad)。只给膝存右值是 `authority_mode="override"` 需要的：
-        #     覆盖授权要写出"右膝的绝对目标"，而 default 是严格镜像（−2.1/+2.1）**不代表实测
-        #     镜像**（策略两膝可差 0.05 rad 量级），拿 `−ref_k` 顶替会在进覆盖段那拍造成目标跳变。
+        # 覆盖授权要写出"右膝的绝对目标"，而 default 是严格镜像（−2.1/+2.1）**不代表实测
+        # 镜像**（策略两膝可差 0.05 rad 量级），拿 `−ref_k` 顶替会在进覆盖段那拍造成目标跳变。
         self.ref_L = torch.zeros(
             self.num_envs, dtype=torch.float, device=self.device, requires_grad=False
         )   # 本拍模板要的**腿竖直伸量**目标 (m) ⇒ 形状跟踪项与执行校验的共同分母
@@ -2642,7 +2642,7 @@ class WBRFlatMob(LeggedRobot):
         )   # 事件内**机身最低点** (m) ⇒ 绝对蹲到位判定的被测量
 
         # ---- C2. 事件量采集：只写不读 ⇒ 策略行为逐位不变 ----
-        #   时刻 s、位置 m、力 N、冲量 N·s。
+        # 时刻 s、位置 m、力 N、冲量 N·s。
         self.ev_t = torch.zeros(
             self.num_envs, dtype=torch.float, device=self.device, requires_grad=False
         )   # 本事件走过的时间 (s)＝各事件时刻的公共时基
@@ -2687,11 +2687,11 @@ class WBRFlatMob(LeggedRobot):
         self.ev_land_pay = torch.zeros(
             self.num_envs, dtype=torch.float, device=self.device, requires_grad=False
         )   # 落地结算的**本拍乘子**（只在触地那一拍非零）：确认起飞 × 直立门 ×
-        #   落地冲击 soft × 预蹲比值门 g1 × 腿伸比值门 ⇒ `_reward_jump_landing` 一次结清的钱。
+        # 落地冲击 soft × 预蹲比值门 g1 × 腿伸比值门 ⇒ `_reward_jump_landing` 一次结清的钱。
         self.ev_fwd_pay = torch.zeros(
             self.num_envs, dtype=torch.float, device=self.device, requires_grad=False
-        )   # 【P8J5a】前跳奖的**本拍乘子**（只在触地那一拍非零）：确认起飞 × 直立门 ×
-        #   g1·g2 × 行进档 × 位移分 clamp(dx_air/0.15,0,1) ⇒ `_reward_jump_forward`。
+        )   # 前跳奖的**本拍乘子**（只在触地那一拍非零）：确认起飞 × 直立门 ×
+        # g1·g2 × 行进档 × 位移分 clamp(dx_air/0.15,0,1) ⇒ `_reward_jump_forward`。
         self.air_body_x = torch.zeros(
             self.num_envs, dtype=torch.float, device=self.device, requires_grad=False
         )   # 离地首拍锁存的世界系 x（前跳奖位移分子基准）
@@ -2705,7 +2705,7 @@ class WBRFlatMob(LeggedRobot):
         self.ev_apex_leg_pay = torch.zeros(
             self.num_envs, dtype=torch.float, device=self.device, requires_grad=False
         )   # 顶点（相位3→4 那一拍）的腿长奖**本拍乘子**：高斯分 × 门 ⇒ `_reward_jump_leg_apex`
-        #   一次结清的钱。非相位3 的帧记 −1（不参与 max）⇒ 窗里只算腾空段。
+        # 一次结清的钱。非相位3 的帧记 −1（不参与 max）⇒ 窗里只算腾空段。
         # 真跳高（轮底离地）结果奖：同一顶点帧一次性结清，被奖励量 = wheel_peak_min
         self.ev_top_height_pay = torch.zeros(
             self.num_envs, dtype=torch.float, device=self.device, requires_grad=False
@@ -2726,7 +2726,7 @@ class WBRFlatMob(LeggedRobot):
         self.ev_takeoff_ever = torch.zeros(
             self.num_envs, dtype=torch.bool, device=self.device, requires_grad=False
         )   # 【P6R33】"本事件内**曾经**确认起飞"锁存：reset 清 `ev_takeoff` 时它已被
-            #   reset_idx 写进 extras（探针可分"没跳过"与"跳了但撞地"）；不参与任何奖励发放
+            # reset_idx 写进 extras（探针可分"没跳过"与"跳了但撞地"）；不参与任何奖励发放
         self.v_launch = torch.zeros(
             self.num_envs, dtype=torch.float, device=self.device, requires_grad=False
         )   # 确认起飞那一拍的 v_z (m/s) ⇒ S0 门槛③
@@ -2814,7 +2814,7 @@ class WBRFlatMob(LeggedRobot):
         self.L_air_hold = torch.zeros(
             self.num_envs, dtype=torch.float, device=self.device, requires_grad=False
         )   # **确认起飞那一拍**的实测腿竖直伸量 (m) ⇒ 相位 3「维持离地腿型」的
-        #   设定点取**实测值不是模板值**："维持离地腿型"的语义就是"别动"。
+        # 设定点取**实测值不是模板值**："维持离地腿型"的语义就是"别动"。
 
         # ---- H. 任务级旗标（行走侧公用，不属跳跃相位） ----
         self.is_jumping = torch.zeros(
@@ -2848,14 +2848,14 @@ class WBRFlatMob(LeggedRobot):
         self.filtered_wheel_acceleration = torch.zeros_like(self.last_wheel_control_vel)
 
         # 【P8W7】初始化两轮静态域随机化（pd / motor / com / 传感器 bias / 延迟档 + 名义掩码）。
-        #   全键退化 ⇒ 全部等价单位量/零，行为逐位不变；摩擦/质量/推扰三键走基类，键在 config。
+        # 全键退化 ⇒ 全部等价单位量/零，行为逐位不变；摩擦/质量/推扰三键走基类，键在 config。
         self._init_domain_rand_static()
 
     # ===================== 两轮模式的域随机化（P8W7 移植自 flat4；退化值 = no-op）=====================
-    #   sim 侧：pd_gain_range / motor_strength_range / com_offset_range / push_pitch_vel_max /
-    #           nominal_env_fraction（摩擦/质量/推扰三键走基类）
-    #   传感侧：imu_gyro_bias_range / imu_acc_bias_range / gravity_offset_range /
-    #           obs_delay_max_steps / action_delay_max_steps
+    # sim 侧：pd_gain_range / motor_strength_range / com_offset_range / push_pitch_vel_max /
+    # nominal_env_fraction（摩擦/质量/推扰三键走基类）
+    # 传感侧：imu_gyro_bias_range / imu_acc_bias_range / gravity_offset_range /
+    # obs_delay_max_steps / action_delay_max_steps
     # 静态类逐 env 建环境时抽一次；push_pitch 在 _push_robots 里随推扰抽；
     # nominal_env_fraction 命中的环境强制回名义值。
     def _dr_nominal_mask(self):
@@ -3005,7 +3005,7 @@ class WBRFlatMob(LeggedRobot):
         return super().step(actions)
 
     def _apply_drop_rule(self, actions):
-        """【P8W9 2026-11-05】竖直墙面的落地规则：FLIGHT 事件窗内的控制层接管（不改权重）。
+        """竖直墙面的落地规则：FLIGHT 事件窗内的控制层接管（不改权重）。
 
         开环诊断（`terrain_eval --trace-fail`）暴露的失败链：轮子在**空中被策略刹停**
         （左轮 10.5→6.8 rad/s、右侧保持 −10），落地那拍接触力 626 N、pitch 突变，

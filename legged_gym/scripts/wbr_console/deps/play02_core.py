@@ -1,11 +1,11 @@
 # ==============================================================================
 # WBR Console 独立化抽取副本：play02_core.py
 # 用途：与 plot02_core.py 一起替代 scripts/play02.py，使 wbr_console 不依赖原脚本。
-#       原始 play02.py 在 scripts/ 下保持一行不改（删除与否待用户确认）。
+# 原始 play02.py 在 scripts/ 下保持一行不改（删除与否待用户确认）。
 # 与原版差异（仅 3 处，函数体逐字未动）：
-#   1) DATA_DIR 改为绝对路径——本文件被搬进 wbr_console/deps/，不能按 __file__ 定位；
-#   2) REPO_ROOT 改为绝对路径（原版按 __file__ 上溯 3 级，副本位置会偏一层）；
-#   3) 顶部追加了这段出处说明（其余内容逐字节同 scripts/play02.py）。
+# 1) DATA_DIR 改为绝对路径——本文件被搬进 wbr_console/deps/，不能按 __file__ 定位；
+# 2) REPO_ROOT 改为绝对路径（原版按 __file__ 上溯 3 级，副本位置会偏一层）；
+# 3) 顶部追加了这段出处说明（其余内容逐字节同 scripts/play02.py）。
 # ==============================================================================
 
 # ==============================================================================
@@ -13,16 +13,16 @@
 # Author    : SYH
 # File      : play02.py
 # Purpose   : WBR 平地策略遥测【采集端】。
-#             只做三件事：面板下发指令（含键盘步进）→ 每控制步采样 → 每 10 s 落一个 TSV 数据段。
-#             画图不在这里，交给同目录 plot02.py 离线读数据段生成自包含 HTML。
+# 只做三件事：面板下发指令（含键盘步进）→ 每控制步采样 → 每 10 s 落一个 TSV 数据段。
+# 画图不在这里，交给同目录 plot02.py 离线读数据段生成自包含 HTML。
 #
 # 【两种启动档位 --play_mode】
-#   single（默认，＝原 play02，行为不变）：跑 --task 指定的**一个** env + 一个策略。
-#       · 单独四轮：--task wbr_flat4 --from_run_config releases/P7F3e_yaw1_dr15
-#       · 跳跃模型：--task wbr_flat  --checkpoint …（跳跃面板全功能）
-#   switch（新增）：单 wbr_switch env 承载**两个**策略，做"四轮 ⇄ 起立 ⇄ 两轮站立"模式切换回放。
-#       · 四轮行驶：F3e（164 维）；起立：P7S（173 维）；两轮站立：P7S 保持（W3 行走接口预留）。
-#       · 单进程只能建一个 env（两个 sim 会段错误）⇒ 两策略共用同一台 v2 物理，靠 obs 切片/重排切换。
+# single（默认，＝原 play02，行为不变）：跑 --task 指定的**一个** env + 一个策略。
+# · 单独四轮：--task wbr_flat4 --from_run_config releases/P7F3e_yaw1_dr15
+# · 跳跃模型：--task wbr_flat  --checkpoint …（跳跃面板全功能）
+# switch（新增）：单 wbr_switch env 承载**两个**策略，做"四轮 ⇄ 起立 ⇄ 两轮站立"模式切换回放。
+# · 四轮行驶：F3e（164 维）；起立：P7S（173 维）；两轮站立：P7S 保持（W3 行走接口预留）。
+# · 单进程只能建一个 env（两个 sim 会段错误）⇒ 两策略共用同一台 v2 物理，靠 obs 切片/重排切换。
 #
 
 import os
@@ -64,9 +64,9 @@ CHANNELS = (
          label='滚转压弯角 (rad)',      rng='ang_roll',    step=0.02,
          inc=('l',),        dec=('j',),        hint='J / L'),
     # 【P6 跳跃】第五路＝跳跃指令（语义＝离地后机身上升量，0＝不跳）。
-    #   滑块只管"要多高"，**跳不跳由空格/跳跃按钮触发**——env 的相位机只在"装填"状态下才吃这条指令。
-    #   zero_ok：下限放到 0。cfg 的 jump_height=[0.10,0.15]（m）是**训练采样区间**、不是指令合法下限，
-    #   照抄会让滑块永远下不到 0（＝永远挂着跳跃指令），所以上限仍取 cfg、下限放开到 0 ⇒ 面板量程 [0, 0.15]。
+    # 滑块只管"要多高"，**跳不跳由空格/跳跃按钮触发**——env 的相位机只在"装填"状态下才吃这条指令。
+    # zero_ok：下限放到 0。cfg 的 jump_height=[0.10,0.15]（m）是**训练采样区间**、不是指令合法下限，
+    # 照抄会让滑块永远下不到 0（＝永远挂着跳跃指令），所以上限仍取 cfg、下限放开到 0 ⇒ 面板量程 [0, 0.15]。
     dict(key='jump_height', short='jump', name='跳跃升高', unit='m',
          label='跳跃指令·升高量 (m)', rng='jump_height', step=0.01, zero_ok=True,
          inc=('o',),        dec=('u',),        hint='U / O'),
@@ -97,13 +97,13 @@ GUI_DEFAULTS = {'lin_vel_x': 0.0, 'ang_vel_yaw': 0.0, 'base_height': 0.25, 'ang_
 gui_cmds = dict(GUI_DEFAULTS)
 
 # 跳跃触发状态（面板线程写、仿真线程读；同样只靠 GIL 下单个 dict 项的原子读写）
-#   arm_once：空格/跳跃按钮按一次＝装填一次跳；auto：按住 P 打开"每 1.2 s 自动再装填"的连跳
+# arm_once：空格/跳跃按钮按一次＝装填一次跳；auto：按住 P 打开"每 1.2 s 自动再装填"的连跳
 jump_flags = {'arm_once': False, 'auto': False}
 
 # 模式切换的共享状态（面板线程写、仿真线程读）：
-#   mode    —— 当前模式（面板显示用）
-#   request —— 面板按下的切换请求（'toggle'），仿真线程消费后清 None
-#   reset   —— 面板请求复位（R / 复位按钮），仿真线程消费后清 False
+# mode    —— 当前模式（面板显示用）
+# request —— 面板按下的切换请求（'toggle'），仿真线程消费后清 None
+# reset   —— 面板请求复位（R / 复位按钮），仿真线程消费后清 False
 mode_shared = {'mode': MODE_FOURW, 'request': None, 'reset': False}
 
 # 主循环每步整体替换、面板线程只读 ⇒ 两边不共享同一个可变对象，不需要加锁
@@ -167,8 +167,8 @@ def fmt_jump(d, in_cmd, armed, auto):
 
 
 # ── 统一相位编号（0-11，与 envs/wbr/uni/phase.py 一致）──
-#   0 IDLE2W 两轮待机 | 1-5 JUMP1-5 跳跃五相 | 6 HOLD4W 四轮静稳 |
-#   7 RISE 起立转起 | 8 HANDOVER 起立交接 | 9 LOWER 趴下降高 | 10 TILT 趴下探地 | 11 ABSORB 趴下吸能
+# 0 IDLE2W 两轮待机 | 1-5 JUMP1-5 跳跃五相 | 6 HOLD4W 四轮静稳 |
+# 7 RISE 起立转起 | 8 HANDOVER 起立交接 | 9 LOWER 趴下降高 | 10 TILT 趴下探地 | 11 ABSORB 趴下吸能
 # 控制层内部 env.ph 是「重载」的（四轮/起立/趴下=切换机 0..6，两轮=跳跃机 0..5），
 # 且已训练网络逐位依赖其原值 ⇒ 不改内部；本函数把内部值「补丁映射」到统一 0-11 供显示/记录。
 # 新模型今后原生按 0-11 输出（日志 meta 标 ph_scheme=native11），届时本补丁不再生效。
@@ -216,7 +216,7 @@ DBG_SEG_W = max(dwidth(_dbg_seg_yaw({'yaw_raw': 0.0, 'yaw_tgt': 0.0, 'yaw_cap': 
 
 
 def fmt_in(ch, v):
-    """指令列的显示格式。默认五路统一 m/rad + 两位小数（作者要求同口径），跳跃那路也不例外；
+    """指令列的显示格式。默认五路统一 m/rad + 两位小数，跳跃那路也不例外；
     高度那路用 fmt='+.3f'（0.005 步进需要三位才不丢精度、也避免 0.175 被显示成 0.17）。"""
     return f"{v:{ch.get('fmt', '+.2f')}}"
 
@@ -234,7 +234,7 @@ STATUS_GAP = 18
 
 
 # ==============================================================================
-#  策略加载（switch 档直接构造 ActorCritic；与训练同结构 [512,256,128] elu）
+# 策略加载（switch 档直接构造 ActorCritic；与训练同结构 [512,256,128] elu）
 # ==============================================================================
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
 POLICY_HIDDEN = [512, 256, 128]
@@ -261,11 +261,11 @@ def load_actor_critic(path, obs_dim, device):
     return net
 
 
-# 【2026-10-29】回填白名单：地形**几何**不从历史 config 回填。
-#   原因：`--from_run_config` 指向平地年代的 run（如 W3）时，其 config 里
-#   `terrain.mesh_type = "plane"`、`height_field_file = None`、`num_rows/num_cols = 10/20`、
-#   `vertical_scale = 0.005` 会把当前任务自己的地形图**静默覆盖成平地**（控制台看不到任何地形，
-#   日志里也不会出现 `[Terrain] 已加载高度图`）。这些键属于"当前任务"而不是"历史 run"。
+# 回填白名单：地形**几何**不从历史 config 回填。
+# 原因：`--from_run_config` 指向平地年代的 run（如 W3）时，其 config 里
+# `terrain.mesh_type = "plane"`、`height_field_file = None`、`num_rows/num_cols = 10/20`、
+# `vertical_scale = 0.005` 会把当前任务自己的地形图**静默覆盖成平地**（控制台看不到任何地形，
+# 日志里也不会出现 `[Terrain] 已加载高度图`）。这些键属于"当前任务"而不是"历史 run"。
 _TERRAIN_GEOM_KEYS = (
     "mesh_type", "height_field_file", "num_rows", "num_cols", "terrain_length",
     "terrain_width", "horizontal_scale", "vertical_scale", "border_size",
@@ -297,7 +297,7 @@ def _fill_from_json(obj, d, _path=""):
 
 
 # ==============================================================================
-#  控制面板
+# 控制面板
 # ==============================================================================
 def start_gui_thread(env, ranges=None, switch=False):
     """控制面板：每行 名称-滑块-指令-目标-实际，最下面几行是跳跃诊断与目标层分解。
@@ -548,7 +548,7 @@ def start_gui_thread(env, ranges=None, switch=False):
 
 
 # ==============================================================================
-#  采样/落盘的公共小工具
+# 采样/落盘的公共小工具
 # ==============================================================================
 def _leg_extension(env, dpos):
     thigh = env.cfg.rewards.thigh_length
@@ -572,7 +572,7 @@ def _open_log(prefix, meta, notes, columns):
 
 
 # ==============================================================================
-#  single 档：原 play02 行为（逐行保留）
+# single 档：原 play02 行为（逐行保留）
 # ==============================================================================
 def _build_single(args):
     """建单策略 env + 策略（等价原 play02 第 1 步）。返回 env, policy, ppo_runner。"""
@@ -585,9 +585,9 @@ def _build_single(args):
         print(f"[from_run_config] 已回填 {_p} → env_cfg（复现该 run 参数；回放覆盖仍在其后生效）")
     env_cfg.env.num_envs = int(getattr(args, "num_envs", None) or 3)   # 控制台传 1~3；不传=3（历史默认）
     env_cfg.env.episode_length_s = 3600
-    # 【P8W1 2026-10-28】只有平地任务才缩小地形网格。`wbr_terrain` 的高度图是 4 行 ×6 列，
-    #   强行改成 2×2 会让 Terrain._load_height_field 的尺寸校验报错（实测 600x600 vs 700x800），
-    #   控制台表现为"拉起两秒后退出"。平地任务不读高度图，保持 2×2 以省内存。
+    # 只有平地任务才缩小地形网格。`wbr_terrain` 的高度图是 4 行 ×6 列，
+    # 强行改成 2×2 会让 Terrain._load_height_field 的尺寸校验报错（实测 600x600 vs 700x800），
+    # 控制台表现为"拉起两秒后退出"。平地任务不读高度图，保持 2×2 以省内存。
     if getattr(env_cfg.terrain, "height_field_file", None) is None:
         env_cfg.terrain.num_rows = 2
         env_cfg.terrain.num_cols = 2
@@ -659,8 +659,8 @@ def run_single(args):
         f"wheel_idx={','.join(str(i) for i in sorted(wheel_set))}",
         f"torque_limits={','.join(f'{v:.4f}' for v in torque_limits)}",
         f"dt={dt:.6f}",
-        # 【P7F4】model_file_path/load_num_steps 属性在 rsl_rl 1.0.2 不存在（恒写 "?"），
-        #   绘图页因此解析不出模型——改用真实来源：load_run 目录 + runner 已加载的迭代号。
+        # model_file_path/load_num_steps 属性在 rsl_rl 1.0.2 不存在（恒写 "?"），
+        # 绘图页因此解析不出模型——改用真实来源：load_run 目录 + runner 已加载的迭代号。
         "model_dir=" + str(args.load_run if (getattr(args, "load_run", None) and os.path.isdir(str(args.load_run))) else "?"),
         "model_iter=" + str(getattr(ppo_runner, "current_learning_iteration", None) or getattr(args, "checkpoint", "?")),
         "model_cli=" + "%s|%s" % (getattr(args, "load_run", "?"), getattr(args, "checkpoint", "?")),
@@ -682,7 +682,7 @@ def run_single(args):
         "done=1 表示该步触发过重置(摔倒/超时)，该数据段不可当作连续轨迹",
     ]
 
-    log_fh, log_path = _open_log("wbr_tel_isaac", meta, notes, columns)   # 文件名带引擎标注（2026-11-06）
+    log_fh, log_path = _open_log("Isaac_1", meta, notes, columns)   # Isaac_1_=单策略
     written = 0
     seg = []
 
@@ -850,7 +850,7 @@ def run_single(args):
 
 
 # ==============================================================================
-#  switch 档：单 wbr_switch env + F3e/P7S 两策略 + 模式机
+# switch 档：单 wbr_switch env + F3e/P7S 两策略 + 模式机
 # ==============================================================================
 def _build_switch(args, task="wbr_switch"):
     env_cfg, _ = task_registry.get_cfgs(name=task)
@@ -867,8 +867,8 @@ def _build_switch(args, task="wbr_switch"):
     env_cfg.domain_rand.obs_delay_max_steps = 0
     env_cfg.rewards.switch.residual_base = False      # 纯策略回放（不叠加 W3 基线）
     # uni 两轮可跳：对齐单策略 run_single 的「瞬时起跳」（arm_delay 仅是触发节流计时器，
-    #   不进 161 维观测/不进奖励/不是权重的一部分 ⇒ 不影响 sim2sim/real；grounded&upright 门仍在）。
-    #   旧 switch 档（task!="wbr_uni"）保持原值不动。
+    # 不进 161 维观测/不进奖励/不是权重的一部分 ⇒ 不影响 sim2sim/real；grounded&upright 门仍在）。
+    # 旧 switch 档（task!="wbr_uni"）保持原值不动。
     if task == "wbr_uni":
         env_cfg.rewards.jump.arm_delay = 0.1
 
@@ -876,13 +876,13 @@ def _build_switch(args, task="wbr_switch"):
     env.playback_hold = True
     dev = env.device
     p_4w = load_actor_critic(args.fourw_checkpoint, 164, dev)
-    # 【2026-10-27】起立槽可为"相位脚本"（standup_checkpoint 传空串）⇒ 不起立网络，p_stand=None。
-    #   仅在 standup_mode='net' 时才会用到 p_stand；脚本模式走 env.rise_script_step()。
+    # 起立槽可为"相位脚本"（standup_checkpoint 传空串）⇒ 不起立网络，p_stand=None。
+    # 仅在 standup_mode='net' 时才会用到 p_stand；脚本模式走 env.rise_script_step()。
     p_stand = load_actor_critic(args.standup_checkpoint, 173, dev) if getattr(args, "standup_checkpoint", "") else None
     p_w3 = load_actor_critic(args.w3_checkpoint, 161, dev)   # 两轮站立/行走平衡网（交接目标）
     p_lie = load_actor_critic(args.lie_checkpoint, 173, dev)  # 趴下（2W→4W）专用策略
     # 【P8 五槽】跳跃槽（事件级）：两轮行走网常驻，跳跃事件窗（env.ph>0）内由跳跃网接管。
-    #   161 维与 w3 同 perm（W3_ACT_PERM）；空串=不加载（run_switch 回落行走网，行为同旧四槽）。
+    # 161 维与 w3 同 perm（W3_ACT_PERM）；空串=不加载（run_switch 回落行走网，行为同旧四槽）。
     p_jump = load_actor_critic(args.jump_checkpoint, 161, dev) if getattr(args, "jump_checkpoint", "") else None
     return env, p_4w, p_stand, p_w3, p_lie, p_jump
 
@@ -935,7 +935,7 @@ def run_switch(args, task="wbr_switch"):
     seg_steps = int(round(SEGMENT_SECONDS / dt))
 
     # 两轮站立/行走用 W3 平衡网：动作 W3 序→wbr4 序重排；观测用 env._build_w3_obs()；
-    #   两轮模式下把 default_dof_pos 切成 W3 的 2W 站姿（W3 的 dof_err/PD 都相对它）。
+    # 两轮模式下把 default_dof_pos 切成 W3 的 2W 站姿（W3 的 dof_err/PD 都相对它）。
     W3_ACT_PERM = [0, 1, 3, 4, 2, 5]
     uni = (tag == "uni")            # 阶段 A：跳跃/两轮ph0 仅在 uni 启用；旧 switch 沿用原行为
     _dflt_4w = env.default_dof_pos.clone()
@@ -1018,7 +1018,7 @@ def run_switch(args, task="wbr_switch"):
             gui_cmds['ang_roll'] = 0.0
 
     # ---- 统一五列模板：四槽日志按单策略口径补齐列，使两者共用同一份 plot02.build_panel_cols ----
-    #   含：vz/roll/jump/关节位置+扭矩/相位等。相位机 dbg_ph=env.ph（四槽 0..6）。
+    # 含：vz/roll/jump/关节位置+扭矩/相位等。相位机 dbg_ph=env.ph（四槽 0..6）。
     columns = ['step', 'time_s', 'done',
                'in_vx', 'tgt_vx', 'act_vx',
                'in_yaw', 'tgt_yaw', 'act_yaw',
@@ -1034,11 +1034,11 @@ def run_switch(args, task="wbr_switch"):
         if i in leg_set:
             columns += [f'pos_tgt__{name}', f'pos_act__{name}']
     columns += ['dbg_ph', 'uni_ph']
-    # 【2026-10-27】事件列（只加不改）：让链上读数能直接进判据表，不必每次用探针复算。
-    #   rise_sub  = P7T 脚本起立子段 0-5（HOLD/CROUCH/CROUCH_HOLD/EXTEND/LIFT/DONE）；非脚本起立时 -1
-    #   armed     = 跳跃装填位；jump_blocked = 本拍装填被"仅 ph==0"守卫清掉（诊断位）
-    #   ev_takeoff/ev_land = 轮底离地上升沿 / 触地下降沿当拍；jump_apex/jump_air_s = 本次跳跃峰值与腾空时长
-    #   v_impact  = 落地当拍 |vz|（m/s）
+    # 事件列（只加不改）：让链上读数能直接进判据表，不必每次用探针复算。
+    # rise_sub  = P7T 脚本起立子段 0-5（HOLD/CROUCH/CROUCH_HOLD/EXTEND/LIFT/DONE）；非脚本起立时 -1
+    # armed     = 跳跃装填位；jump_blocked = 本拍装填被"仅 ph==0"守卫清掉（诊断位）
+    # ev_takeoff/ev_land = 轮底离地上升沿 / 触地下降沿当拍；jump_apex/jump_air_s = 本次跳跃峰值与腾空时长
+    # v_impact  = 落地当拍 |vz|（m/s）
     columns += ['rise_sub', 'armed', 'jump_blocked', 'ev_takeoff', 'ev_land',
                 'jump_apex', 'jump_air_s', 'v_impact']
     # 【P8 五槽】ctrl = 本拍驱动腿/轮的策略（0=两轮行走网 1=跳跃网；事件窗=1）
@@ -1069,12 +1069,12 @@ def run_switch(args, task="wbr_switch"):
         "统一模板：与单策略同一份面板；vz_body/roll/jump/关节列按单策略口径补记（切换为瞬时摆位，跳跃过程数值多为 0）",
         f"四轮 F3e(164)，起立 P7S(173)，趴下 P7L(173)，两轮 {ctrl_2w}(161)；切换为瞬时摆位（非物理过渡）",
     ]
-    log_fh, log_path = _open_log("wbr_switch_tel_isaac", meta, notes, columns)   # 文件名带引擎标注（2026-11-06）
+    log_fh, log_path = _open_log("Isaac_2", meta, notes, columns)   # Isaac_2_=双模式
     written = 0
     seg = []
     _last_arm_t = -99.0        # 上次装填跳时刻（连跳限流用）
-    # ---- 【2026-10-27】跳跃事件跟踪：轮底离地上升沿/下降沿，供 TSV 事件列直接进判据表 ----
-    #   阈值 10 mm：地面接触噪声 <2 mm，最小交付档（指令 0.05）实测升高 84 mm，10 mm 不会误触发。
+    # ---- 跳跃事件跟踪：轮底离地上升沿/下降沿，供 TSV 事件列直接进判据表 ----
+    # 阈值 10 mm：地面接触噪声 <2 mm，最小交付档（指令 0.05）实测升高 84 mm，10 mm 不会误触发。
     AIR_EPS = 0.01
     _air_prev = False
     _air_t0 = 0.0
@@ -1109,9 +1109,9 @@ def run_switch(args, task="wbr_switch"):
     jump_net_on = False                          # 【P8 五槽】跳跃网接管中（跳跃事件窗内 True）
 
     # ---- 传统起立（脚本链）状态：配方出自 2026-10-25 harness 验证（/tmp/chain.py，num_envs 1/3/6 全过）----
-    #   链路：4W 静稳 → smoothstep 折蹲 → 蹲稳 → smoothstep 伸腿 2W(腿P×boost, 轮零矩)
-    #         → 恒力矩 C 抬升(门限 p_g>-0.26rad 且 z>0.20) → 交 W3(hcmd=trad_hcmd)。
-    #   全程 act=0（PD 目标=default_dof_pos），轮力矩经 _compute_torques 包装注入。
+    # 链路：4W 静稳 → smoothstep 折蹲 → 蹲稳 → smoothstep 伸腿 2W(腿P×boost, 轮零矩)
+    # → 恒力矩 C 抬升(门限 p_g>-0.26rad 且 z>0.20) → 交 W3(hcmd=trad_hcmd)。
+    # 全程 act=0（PD 目标=default_dof_pos），轮力矩经 _compute_torques 包装注入。
     _trad_crouch = torch.tensor([1.5391, -2.2722, -1.5391, 2.2722], device=dev)   # 蹲姿 hip/knee [4]
     trad_p_nom = env.p_gains[env.leg_dof].clone()                                  # 名义腿 P 增益 [4]
     trad_t = 0.0
@@ -1149,8 +1149,8 @@ def run_switch(args, task="wbr_switch"):
             env.p_gains[env.leg_dof] = trad_p_nom
             trad_boosted = False
 
-    # ---- 【2026-10-27 相位脚本起立】P7T 改为 env 内 RiseScript（rise_script.py），控制台只驱动、不再 monkeypatch ----
-    #   与上面 MODE_TRAD_RISE（老内联分支，逐位兼容保留）并存；standup_mode='script' 走这条。
+    # ---- 起立走 env 内 RiseScript（rise_script.py），控制台只驱动 ----
+    # 与上面 MODE_TRAD_RISE（老内联分支，逐位兼容保留）并存；standup_mode='script' 走这条。
     def _rise_script_on():
         if hasattr(env, "set_rise_p_nominal"):
             env.set_rise_p_nominal()
@@ -1161,7 +1161,7 @@ def run_switch(args, task="wbr_switch"):
 
     def _rise_script_cfg():
         # 从场景参数（trad_* / t_trad_*）转成 RiseScript 的 cfg 键
-        #   2026-10-27：C 默认 9→8（平台软件限幅）；z 门默认 None（纯俯仰，真机可测量）
+        # 2026-10-27：C 默认 9→8（平台软件限幅）；z 门默认 None（纯俯仰，真机可测量）
         _zh = getattr(sw, 'trad_z_handover_min', None)
         return {
             "t_hold": float(getattr(sw, 't_trad_hold', 0.6)),
@@ -1177,6 +1177,19 @@ def run_switch(args, task="wbr_switch"):
                                else float(_zh)),
             "hcmd": float(getattr(sw, 'trad_hcmd', 0.28)),
             "hcmd_hold": float(getattr(sw, 'trad_hcmd_hold', 3.0)),
+            # ---- P7T2 轮矩律（俯仰 PD ＋ 线速度回馈）参数接线 ----
+            # 旧场景 JSON 无这些键；getattr 兜底值须与 rise_script.default_cfg() 逐字对齐。
+            "lift_profile": str(getattr(sw, 'trad_lift_profile', 'p7t2')),
+            "kp_pitch": float(getattr(sw, 'trad_kp_pitch', 12.0)),
+            "kd_pitch": float(getattr(sw, 'trad_kd_pitch', 3.0)),
+            "kv_vx": float(getattr(sw, 'trad_kv_vx', 14.0)),
+            "vx_tol": float(getattr(sw, 'trad_vx_tol', 0.6)),
+            "extend_retract": float(getattr(sw, 'trad_extend_retract', 1.0)),
+            "extend_boost": float(getattr(sw, 'trad_extend_boost', 1.5)),
+            "band_pitch_tol": float(getattr(sw, 'trad_band_pitch_tol', 0.35)),
+            "band_rate_tol": float(getattr(sw, 'trad_band_rate_tol', 1.0)),
+            "band_dwell": float(getattr(sw, 'trad_band_dwell', 0.10)),
+            "pose_2w": getattr(sw, 'trad_pose_2w', [1.415, -2.113, -1.415, 2.113]),
         }
 
     print("\n" + "=" * 78)
@@ -1306,7 +1319,7 @@ def run_switch(args, task="wbr_switch"):
 
             elif mode == MODE_RISING:
                 # 起立（方案②）：P7S 完整相位机起立（HOLD4W→RISE→HANDOVER→HOLD2W），到交接点切 W3 对称站定。
-                #   P7S 负责抬起并站到两轮，W3 负责对称站定/平衡（之后 vx/yaw 可走）。
+                # P7S 负责抬起并站到两轮，W3 负责对称站定/平衡（之后 vx/yaw 可走）。
                 in_vx = in_yaw = 0.0
                 in_h = 0.19
                 env.command_targets[:, 0] = 0.0
@@ -1338,8 +1351,8 @@ def run_switch(args, task="wbr_switch"):
 
             elif mode == MODE_TRAD_RISE:
                 # 传统起立（方案①脚本链，2026-10-25 harness num_envs=1/3/6 全过）。
-                #   两种引擎：'inline'＝老内联分支（monkeypatch，逐位兼容）；'env'＝env 内 RiseScript
-                #   （rise_script.py，headless 可跑，逻辑同一份）。二者产出等价，切换只改引擎不改行为。
+                # 两种引擎：'inline'＝老内联分支（monkeypatch，逐位兼容）；'env'＝env 内 RiseScript
+                # （rise_script.py，headless 可跑，逻辑同一份）。二者产出等价，切换只改引擎不改行为。
                 in_vx = in_yaw = 0.0
                 in_h = 0.19
                 env.command_targets[:, 0] = 0.0
@@ -1426,7 +1439,7 @@ def run_switch(args, task="wbr_switch"):
 
             elif mode == MODE_TWOW:  # 两轮站立/行走：W3 平衡网，vx/yaw 可走
                 # 【P8 五槽】事件窗判定（env.ph>0＝跳跃事件窗内，跳跃网接管；判定供
-                #   in_h 夹取/量程切换/网络选择三处共用）
+                # in_h 夹取/量程切换/网络选择三处共用）
                 _ph_robot = int(env.ph[ROBOT].item())
                 _jump_on = bool(uni and (p_jump is not None) and _ph_robot > 0)
                 in_vx = gui_cmds['lin_vel_x']
@@ -1444,8 +1457,8 @@ def run_switch(args, task="wbr_switch"):
                 else:
                     in_h = min(max(gui_cmds['base_height'], 0.2), 0.35)   # 体高滑块生效（W3 训练量程 [0.2,0.35]）
                 # 【P8 五槽】装填待触发/事件窗：体高指令夹进 P8J 训练带 [0.24,0.30]——
-                #   跳跃触发门要求体高指令落在 [jump_cmd_h_min,jump_cmd_h_max]（P8J=0.24~0.32），
-                #   面板体高在带外时跳跃永不触发；事件窗内保持带内，避免 h 观测列出分布。
+                # 跳跃触发门要求体高指令落在 [jump_cmd_h_min,jump_cmd_h_max]（P8J=0.24~0.32），
+                # 面板体高在带外时跳跃永不触发；事件窗内保持带内，避免 h 观测列出分布。
                 if p_jump is not None and (_ph_robot > 0 or (
                         bool(env.is_armed[ROBOT].item()) and _ph_robot == 0)):
                     in_h = min(max(in_h, 0.24), 0.30)
@@ -1458,23 +1471,23 @@ def run_switch(args, task="wbr_switch"):
                 env.command_targets[:, 5] = in_h
                 env.base_roll_targets[:] = in_roll
                 # 阶段 A：uni 每步只刷量程/默认姿态/观测，**不写相位**（否则会把跳跃机推进的 ph 按回 0）；
-                #   旧 switch 保持原行为（每步写回 SP_HOLD2W）。
+                # 旧 switch 保持原行为（每步写回 SP_HOLD2W）。
                 # 【P8 五槽】事件级跳跃接管：事件窗判定在分支最前（_ph_robot 供 in_h 夹取与本段共用）。
                 _apply_mode(MODE_TWOW, ph=SP_HOLD2W, set_phase=(not uni))
                 if _jump_on:
                     # 事件窗：obs 体高归一化量程切 P8J 训练带 [0.24,0.30]
-                    #   （_apply_mode 每拍覆写回行走带 [0.2,0.35]，故每拍在此重设）
+                    # （_apply_mode 每拍覆写回行走带 [0.2,0.35]，故每拍在此重设）
                     _set_cmd_ranges(env, 0.24, 0.30)
                 obs_in = _obs_for(MODE_TWOW)
                 # 触发门在 env 相位机（flat4 trig，settle_gate=False ⇒ 行进跳不停稳）；
-                #   两网同构 161（obs/act 同 W3 perm）⇒ 切换零间隙；
-                #   退出沿复用 0.3s 腿目标平滑窗（tw_leg0=事件末实际腿姿态）防突跳。
+                # 两网同构 161（obs/act 同 W3 perm）⇒ 切换零间隙；
+                # 退出沿复用 0.3s 腿目标平滑窗（tw_leg0=事件末实际腿姿态）防突跳。
                 if jump_net_on and not _jump_on:
                     tw_leg0 = env.dof_pos[0, env.leg_dof].clone()
                     tw_elapsed = 0.0
                     # 一次性语义：事件结束即清跳跃指令。行走网 P8W7 从未见非零跳跃指令
-                    #   （训练 jump_command_probability=0），残留 0.1 是分布外输入 ⇒ 实测
-                    #   策略主动减速到停（11-04 TSV：0.43→0.07/1s）；滑块一并归零＝一发一跳。
+                    # （训练 jump_command_probability=0），残留 0.1 是分布外输入 ⇒ 实测
+                    # 策略主动减速到停（11-04 TSV：0.43→0.07/1s）；滑块一并归零＝一发一跳。
                     gui_cmds['jump_height'] = 0.0
                     env.command_targets[:, 4] = 0.0
                     jump_net_off_step = step_counter
@@ -1531,8 +1544,8 @@ def run_switch(args, task="wbr_switch"):
                 lie_t += dt
 
             # 跳跃按钮/空格：装填通路。阶段 A：仅在 uni 的两轮模式启用（uni 的 enable_jump 只在两轮打开），
-            #   装填时把跳跃升高写进 command_targets[:,4]，让 _update_jump_phase 的触发门看到指令；
-            #   旧 switch（uni=False）保持原惰性行为，其它模式把跳跃指令清 0（不发跳）。
+            # 装填时把跳跃升高写进 command_targets[:,4]，让 _update_jump_phase 的触发门看到指令；
+            # 旧 switch（uni=False）保持原惰性行为，其它模式把跳跃指令清 0（不发跳）。
             if uni and mode == MODE_TWOW and hasattr(env, 'is_armed'):
                 if jump_flags['arm_once'] or (jump_flags['auto'] and not bool(env.is_armed[ROBOT].item())
                                               and (current_time - _last_arm_t) > 1.2):

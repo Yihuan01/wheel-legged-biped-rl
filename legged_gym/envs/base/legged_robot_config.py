@@ -64,9 +64,9 @@ class LeggedRobotCfg(BaseConfig):
         terrain_proportions = [0.1, 0.1, 0.35, 0.25, 0.2]
         # trimesh only:
         slope_treshold = 0.75 # slopes above this threshold will be corrected to vertical surfaces
-        # 【2026-10-29】viewer 专用"贴地高度着色网格"（纯可视化，不参与物理、不加 actor）：
-        #   地形本身没有颜色接口，用 gym.add_lines 沿地形表面画 0.5 m 网格、每段按高度着色，
-        #   低谷偏蓝 / 中间偏绿 / 高处偏黄，跟随机器人。enable=False 时完全不动。
+        # viewer 专用"贴地高度着色网格"（纯可视化，不参与物理、不加 actor）：
+        # 地形本身没有颜色接口，用 gym.add_lines 沿地形表面画 0.5 m 网格、每段按高度着色，
+        # 低谷偏蓝 / 中间偏绿 / 高处偏黄，跟随机器人。enable=False 时完全不动。
         class grid:
             enable = False
             spacing = 0.5        # m，格距
@@ -195,17 +195,17 @@ class LeggedRobotCfg(BaseConfig):
         ref_env = 0
         pos = [10, 0, 6]  # [m]
         lookat = [11., 5, 3.]  # [m]
-        # 【2026-10-29】光照（全局，只影响 viewer/相机，不改物理）。None = 完全不动 IsaacGym 默认。
-        #   默认单灯很硬 ⇒ 平地一片均匀灰，看不出起伏；压低直射 + 抬环境光 + 斜射。
-        # 【2026-10-29 二调】用户反馈"有点太深"⇒ 直射再降、环境光再抬（画面整体变亮）。
-        #   探针验证过 intensity=0 会全黑 ⇒ 该接口确实生效；最终档 = 直射 0.18 + 环境光 1.0，
-        #   画面整体抬亮一档、阴影保留一点用于读起伏。
+        # 光照（全局，只影响 viewer/相机，不改物理）。None = 完全不动 IsaacGym 默认。
+        # 默认单灯很硬 ⇒ 平地一片均匀灰，看不出起伏；压低直射 + 抬环境光 + 斜射。
+        # 直射更低、环境光更高 ⇒ 画面整体偏亮（避免网格着色过深）。
+        # 探针验证过 intensity=0 会全黑 ⇒ 该接口确实生效；最终档 = 直射 0.18 + 环境光 1.0，
+        # 画面整体抬亮一档、阴影保留一点用于读起伏。
         light_intensity = [0.35, 0.35, 0.35]
         light_ambient = [1.0, 1.0, 1.0]
         light_direction = [-0.42, 0.42, -0.78]   # 仰角约 51°，阴影变短
-        # 【2026-11-01】第二盏方向光（低角度反侧补光，勾凹凸立体感）。None = 不设（保持现状）。
-        #   ambient/直射对比才是立体感来源：ambient 满档（1.0）会把明暗差洗平（P8 可读性调研结论）。
-        #   注意每盏灯的 ambient 是相加的 ⇒ 补光灯的 ambient 默认 0，不抬整体亮度。
+        # 第二盏方向光（低角度反侧补光，勾凹凸立体感）。None = 不设（保持现状）。
+        # ambient/直射对比才是立体感来源：ambient 满档（1.0）会把明暗差洗平（P8 可读性调研结论）。
+        # 注意每盏灯的 ambient 是相加的 ⇒ 补光灯的 ambient 默认 0，不抬整体亮度。
         light2_intensity = None
         light2_ambient = [0.0, 0.0, 0.0]
         light2_direction = [0.5, -0.6, -0.35]

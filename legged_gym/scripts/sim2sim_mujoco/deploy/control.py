@@ -3,8 +3,8 @@
 # Author    : SYH
 # File      : control.py
 # Purpose   : 执行层：动作裁剪 → 腿位置 PD / 轮速度环（实测加速度 D 项，α 低通）→ 逐 dof 力矩
-#             限幅。语义与 wbr_flat4._compute_torques 逐位一致，且**每个物理子步重算一次**
-#             （Isaac 的 200 Hz 力矩更新节奏，轮 D 项依赖它）。
+# 限幅。语义与 wbr_flat4._compute_torques 逐位一致，且**每个物理子步重算一次**
+# （Isaac 的 200 Hz 力矩更新节奏，轮 D 项依赖它）。
 # ==============================================================================
 
 import torch
@@ -33,7 +33,7 @@ class PDController:
         self.accel_limit = float(c["wheel_target_accel_limit"])
         self.dt = float(c["dt_physics"])
         # 【S2 两轮】行走模板的膝偏移常数（off_knee 恒值）：左 + 右 −（flat.py additive 分支镜像语义）。
-        #   四轮契约无此键 → 0 → 不影响四轮路径。jump_template 启用时由相位机每拍接管（见 set_phase_gains）。
+        # 四轮契约无此键 → 0 → 不影响四轮路径。jump_template 启用时由相位机每拍接管（见 set_phase_gains）。
         self.off_knee = float(c.get("off_knee_const", 0.0))
         self.kp0 = self.kp.clone()
         self.kd0 = self.kd.clone()
@@ -41,7 +41,7 @@ class PDController:
         self.leg_override = None
         self.leg_boost = 1.0
         self.wheel_override = None
-        self.wheel_override_l = None      # 【P7T2】左右差动（设置时优先于 wheel_override）
+        self.wheel_override_l = None      # 左右差动（设置时优先于 wheel_override）
         self.wheel_override_r = None
         self.off_hip = float(c.get("off_hip_const", 0.0))    # 【S2b 跳跃】动态注入（回放式模板）
         self.knee_l = self.names.index("left_knee_joint") if "left_knee_joint" in self.names else None
@@ -111,7 +111,7 @@ class PDController:
         scaled = torch.zeros(len(self.names), dtype=torch.float32)
         if self.leg_override is not None:
             # 【S3 P7T】脚本语义（flat.py 同款）：a=0、default=脚本角 ⇒ PD 目标=default。
-            #   腿位 scaled 置 0，脚本角由调用方写 self.default 的腿列。
+            # 腿位 scaled 置 0，脚本角由调用方写 self.default 的腿列。
             scaled[self.adi[:4]] = 0.0
         else:
             scaled[self.adi] = a * self.scale_vec
@@ -142,7 +142,7 @@ class PDController:
 
         tau = torch.clip(tau, -self.lim, self.lim)
         if self.wheel_override_l is not None or self.wheel_override_r is not None:
-            # 【P7T2】左右差动覆盖（roll 控制）；未设置的侧用 wheel_override 值
+            # 左右差动覆盖（roll 控制）；未设置的侧用 wheel_override 值
             base = self.wheel_override if self.wheel_override is not None else 0.0
             tau[self.wheel_dof[0]] = float(self.wheel_override_l if self.wheel_override_l is not None else base)
             tau[self.wheel_dof[1]] = float(self.wheel_override_r if self.wheel_override_r is not None else base)

@@ -3,7 +3,7 @@
 # Author    : SYH
 # File      : wbr_terrain_config.py
 # Purpose   : 同一策略的四个地形任务配置，只替换 terrain 段，观测仍 161 维（不含高程）：
-#             wbr_terrain 随机起伏 / wbr_demo 演示走廊 / wbr_combo 组合地形 / wbr_elements 单元素验收。
+# wbr_terrain 随机起伏 / wbr_demo 演示走廊 / wbr_combo 组合地形 / wbr_elements 单元素验收。
 # ==============================================================================
 
 import os
@@ -44,7 +44,7 @@ class WBRTerrainCfg(WBRFlatCfg):
         origin_z_use_max = False              # 出生点 z 取中心均值
         add_perlin_noise = False
         # viewer 里的"贴地高度着色网格"（纯可视化，控制台看图用）
-        # 【2026-11-01 可读性推广】demo 验看通过后的全套外观值（网格细分修复＋加密＋提亮色标）
+        # 可读性外观全套值（网格细分＋加密＋提亮色标）
         class grid(WBRFlatCfg.terrain.grid):
             enable = True
             spacing = 0.25
@@ -55,7 +55,7 @@ class WBRTerrainCfg(WBRFlatCfg):
             color_mid = [0.48, 0.70, 0.50]
 
     class viewer(WBRFlatCfg.viewer):
-        # 【2026-11-01 可读性推广】三灯平衡（明暗差塑形＋低角度补光）；headless 不进此分支，训练零影响
+        # 三灯平衡（明暗差塑形＋低角度补光）；headless 不进此分支，训练零影响
         light_intensity = [0.90, 0.90, 0.90]
         light_ambient = [0.85, 0.85, 0.85]
         light_direction = [-0.42, 0.42, -0.78]
@@ -63,7 +63,7 @@ class WBRTerrainCfg(WBRFlatCfg):
         light2_direction = [0.5, -0.6, -0.35]
 
     class commands(WBRFlatCfg.commands):
-        """【P8W1f 2026-10-29】**与 W3 逐字一致**，地形是本轮唯一的变量。
+        """**与 W3 逐字一致**，地形是本轮唯一的变量。
 
         W3（`releases/W3_vlim085`）已零训练通过 P8 地形判据（行 0~3 全过、
         留出图 seed1 复现）⇒ 本轮的用途只是"让它在地形上多看一眼、抬余量"。
@@ -81,7 +81,7 @@ class WBRTerrainCfg(WBRFlatCfg):
         lin_vel_z_height_from_legs = False
         # 侧倾反馈增益：起伏 / 横向坡打破"左右等高"前提，纯前馈会留系统偏差，故从 0 起抬。
         K_roll_fb = 0.5
-        # 【P8W9 2026-11-05】地形落差被动腾空豁免（独立三态锁存 GROUND/FLIGHT/LANDING）。
+        # 地形落差被动腾空豁免（独立三态锁存 GROUND/FLIGHT/LANDING）。
         # 只在地形任务生效；平地/跳跃任务继承 WBRFlatCfg 时为 False，零影响。
         # 进 FLIGHT 的三条件：双轮同时离地 + vz<-0.15 + 非跳跃回合（见 wbr_flat.py）。
         terrain_flight_waiver = True
@@ -90,7 +90,7 @@ class WBRTerrainCfg(WBRFlatCfg):
         terrain_waiver_budget_s = 3.0       # 每回合累计豁免上限，防"跳着走"刷分
         terrain_land_hold_s = 0.15          # 落地窗口：不豁免，姿态/冲击照罚
         terrain_flight_waiver_terms = ("no_fly", "lin_vel_z", "no_moonwalk", "hip_reach")
-        # 【P8W9 2026-11-05】竖直墙面的"伸腿探地 + 落地吸收"奖励（见 wbr_flat.py）。
+        # 竖直墙面的"伸腿探地 + 落地吸收"奖励（见 wbr_flat.py）。
         # 权重只作探索引导：开环实测低速需要伸腿（0.6/15 cm 0→24/32），
         # 但高速过度伸腿会弹跳（0.9 档 k=1.2 时 32→19/32），故不设成主导项。
         drop_extend_ref = 0.20
@@ -109,7 +109,7 @@ class WBRTerrainCfg(WBRFlatCfg):
         # 【P8W7e】末枪＝组合通道累积：push 0.1（P8W7c 已收线）+ 摩擦 ±5%（P8W7d 探针无崩签）
         # 同时开，从 2750 热启动——交付分布=推扰+摩擦双随机。质量/传感器键维持退化
         # （各自包络下基座 zero-shot 已达标，训练无实测增益，见 P8W7a/d 判定）。
-        # com_offset 维持退化：本 Isaac 版本忽略 com 写回（2026-10-31 实测），键无效。
+        # com_offset 维持退化：本 Isaac 版本忽略 com 写回 ⇒ 键无效。
         push_robots = True
         max_push_vel_xy = 0.10
         push_interval_s = 10.0
@@ -120,8 +120,7 @@ class WBRTerrainCfg(WBRFlatCfg):
 
 class WBRTerrainCfgPPO(WBRFlatCfgPPO):
     class algorithm(WBRFlatCfgPPO.algorithm):
-        # 【P8W6a】热启动统一降 lr（3e-4→1e-4）：此前 6/6 次热启动出现过行为漂移
-        # （W 线速度增益 0.95→0.59、P8W1f 更快更矮），降 lr 抑制；作者 2026-10-31 批。
+        # 【P8W6a】热启动统一降 lr（3e-4→1e-4）：不降则热启动必现行为漂移（速度增益塌缩、更快更矮）。
         learning_rate = 1.0e-4
 
     class runner(WBRFlatCfgPPO.runner):
@@ -140,7 +139,7 @@ DROP_FILE = os.path.join(TERRAIN_DIR, "wbr_p8w9_drop.npz")      # P8W9 下台阶
 DROP15_FILE = os.path.join(TERRAIN_DIR, "wbr_p8w9_drop15.npz")  # P8W9c 15 cm 专项图（4 行）
 DROP15V_FILE = os.path.join(TERRAIN_DIR, "wbr_p8w9_drop15v.npz")  # 单行 15 cm 回放图
 COMBO_FILE = os.path.join(TERRAIN_DIR, "wbr_p8_combo_L3.npz")   # 3 档 × 3 种元素排列
-DEMO_FILE = os.path.join(TERRAIN_DIR, "wbr_p8_demo.npz")        # 13.5×7 m 四象限演示场（2026-11-02）
+DEMO_FILE = os.path.join(TERRAIN_DIR, "wbr_p8_demo.npz")        # 13.5×7 m 四象限演示场
 
 
 class WBRDemoCfg(WBRTerrainCfg):
@@ -158,7 +157,7 @@ class WBRDemoCfg(WBRTerrainCfg):
         height_field_file = DEMO_FILE
         num_rows = 1
         num_cols = 1
-        # 【2026-11-02 口径统一】四象限布局：前区两段各再翻倍 ⇒ 29.5 m (x) × 7.0 m (y)
+        # 四象限布局：前区两段各再翻倍 ⇒ 29.5 m (x) × 7.0 m (y)
         terrain_length = 29.5
         terrain_width = 7.0
         horizontal_scale = 0.1
@@ -166,9 +165,8 @@ class WBRDemoCfg(WBRTerrainCfg):
         border_size = 25.0
         slope_treshold = None
         add_perlin_noise = False
-        # 【2026-11-01 可读性推广】grid 与 WBRTerrainCfg 同套外观值（⚠ 本类 terrain 继承自
-        #   WBRFlatCfg.terrain，**不会**继承 WBRTerrainCfg.terrain.grid，必须显式；viewer 走
-        #   WBRTerrainCfg.viewer 继承 ✓）。demo 先行验看后的全套值。
+        # grid 与 WBRTerrainCfg 同套外观值（⚠ 本类 terrain 继承自 WBRFlatCfg.terrain，
+        # **不会**继承 WBRTerrainCfg.terrain.grid，必须显式；viewer 走 WBRTerrainCfg.viewer 继承 ✓）
         class grid(WBRFlatCfg.terrain.grid):
             enable = True
             spacing = 0.25
@@ -203,7 +201,7 @@ class WBRComboCfg(WBRTerrainCfg):
         border_size = 25.0
         slope_treshold = None
         add_perlin_noise = False
-        # 【2026-11-01 可读性推广】与 WBRTerrainCfg 同套外观值（本类 terrain 继承自 WBRFlatCfg.terrain，需显式）
+        # 与 WBRTerrainCfg 同套外观值（本类 terrain 继承自 WBRFlatCfg.terrain，需显式）
         class grid(WBRFlatCfg.terrain.grid):
             enable = True
             spacing = 0.25
@@ -237,7 +235,7 @@ class WBRElementsCfg(WBRTerrainCfg):
         border_size = 25.0
         slope_treshold = None
         add_perlin_noise = False
-        # 【2026-11-01 可读性推广】与 WBRTerrainCfg 同套外观值（本类 terrain 继承自 WBRFlatCfg.terrain，需显式）
+        # 与 WBRTerrainCfg 同套外观值（本类 terrain 继承自 WBRFlatCfg.terrain，需显式）
         class grid(WBRFlatCfg.terrain.grid):
             enable = True
             spacing = 0.25
@@ -288,17 +286,17 @@ class WBRDropCfg(WBRTerrainCfg):
         """
 
         drop_rule_hold_wheel = True      # FLIGHT 期间锁轮速，防空中刹车
-        drop_rule_extend_knee = 1.5      # 低速段空中伸腿（膝动作 ±k）。【2026-11-06 扫描定值】
-                                         #   below 0.72 × knee {1.4/1.5/1.6} @15cm 竖直面：
-                                         #   0.6/0.7 档 = (27,32)/(28,29)/(29,22) —— 1.5 给全场
-                                         #   最高地板（全速度档 ≥28/32），修掉 0.7 档 22/32 低谷
-                                         #   （旧 0.75×1.6）；扫描产物 eval_runs/2026-11-06_P8W9规则扫描
+        drop_rule_extend_knee = 1.5      # 低速段空中伸腿（膝动作 ±k）。
+                                         # below 0.72 × knee {1.4/1.5/1.6} @15cm 竖直面：
+                                         # 0.6/0.7 档 = (27,32)/(28,29)/(29,22) —— 1.5 给全场
+                                         # 最高地板（全速度档 ≥28/32），修掉 0.7 档 22/32 低谷；
+                                         # 取值依据＝eval_runs/2026-11-06_P8W9规则扫描
         drop_rule_extend_below = 0.72    # 只在该 vx 以下伸腿；高速伸腿会弹跳（0.72：门控盖住 0.7 档
-                                         #   且 0.75+ 不触发，与旧 0.75 在验收网格上等价）
+                                         # 且 0.75+ 不触发）
 
     class terrain(WBRTerrainCfg.terrain):
         height_field_file = DROP_FILE
-        # 【2026-11-05 作者要求】台阶改成**真正竖直**：heightfield 逐像素高差在 trimesh 里
+        # 台阶**真正竖直**：heightfield 逐像素高差在 trimesh 里
         # 默认会连成斜面（0.15 m 落差 / 0.1 m 水平 ⇒ 56°）；slope_treshold 让 isaacgym
         # 把超过阈值的边坡顶点水平挪动、生成垂直墙。0.75 = 水平/垂直比，1 格落差即触发。
         # ⚠ 代价：顶点被平移，物理面与高度图采样位置有偏（评测/可视化都以物理面为准）。
@@ -315,14 +313,14 @@ class WBRDropCfg(WBRTerrainCfg):
         num_observations = 161
 
     class commands(WBRTerrainCfg.commands):
-        """【P8W9b 2026-11-05】vx 采样只留**中高速段** 0.45~1.1。
+        """vx 采样只留**中高速段** 0.45~1.1。
 
         根因：R1（全速段 ±1.1）把 0.6 档 15 cm 从 21/32 拉到 5/32 —— 低速段
         （0.3 下 12 cm 以上物理过不去）产生大量全灭负样本，把策略拉向保守减速。
         0.6~0.65 是 15 cm 的动量临界（0.6→21/32、0.65→42/48、0.7→47/48），
         所以训练分布从 0.45 起，覆盖临界区两侧。
 
-        ⚠ R2 实测（2026-11-05）：收窄到 0.45~1.1 **仍无效**——15 cm@0.6 21→5、
+        ⚠ R2 实测：收窄到 0.45~1.1 **仍无效**——15 cm@0.6 21→5、
         @0.75 31→23、@0.9 32→30。结论是不需要训练：V0.27 零训练在 vx 0.7 已 47/48。
         本段保留只为复现 R2；**默认训练建议用全速段 [-1.1, 1.1]**（即注释掉下面两行）。
         """

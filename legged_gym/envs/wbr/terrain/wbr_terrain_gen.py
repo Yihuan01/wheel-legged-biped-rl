@@ -4,7 +4,7 @@
 # File      : wbr_terrain_gen.py
 # Purpose   : 地形元素库 + 单元素验收图生成器（纯 numpy，无 isaacgym 依赖）。
 #
-# 口径（作者 2026-11-02 定，取代 10-29 版）：
+# 口径：
 #   元素从 11 个精简到 7 个，按"能力维度"分四类：
 #     基线      flat
 #     连续起伏  wave（3~4 峰、峰高与波长逐峰变化）、rand（各向同性随机起伏）
@@ -14,7 +14,7 @@
 #               gap（10 cm 平台 | 10 cm 断开 | 10 cm 平台）
 #   删除：t1 左右高低不平 / t3 单边横坡 / t4 纵坡（被 slope 取代）、
 #         t2 旧波浪（被 wave 取代）、bumps/twave（被 speedbump 取代）、
-#         obs 离散障碍 / stones 跳石 / t6 上台阶（作者裁定不做）。
+#         obs 离散障碍 / stones 跳石 / t6 上台阶（不做）。
 #
 # 单元素验收图：4 行（行0 = 平地基线，行1~3 = L1/L2/L3 档）× 7 列（7 个元素），格 8 m × 8 m。
 # ==============================================================================
@@ -39,16 +39,16 @@ NUM_COLS = 7           # 列数（元素种类）  ↔ cfg.terrain.num_cols
 SLOPE_SOFT = 10.0      # 缓坡上限 [°]：一切**可通行衔接**（上台坡、包络收尾）都不超过它
 EDGE_MARGIN = 1.0      # 每格四周留的平地 [m]（保证格界不撞墙、出生点平）
 
-# 侧向斜坡：8°，峰高上限 0.28 m（作者选项 a）⇒ 横向跨度 = 0.28/tan(8°) ≈ 2.0 m
+# 侧向斜坡：8°，峰高上限 0.28 m ⇒ 横向跨度 = 0.28/tan(8°) ≈ 2.0 m
 SLOPE_DEG = 8.0
-SLOPE_RAMP_W = 2.0     # 横向斜坡跨度 [m]（作者：左侧一个宽 2 m 左右的横向斜坡）
+SLOPE_RAMP_W = 2.0     # 横向斜坡跨度 [m]（左侧一个宽 2 m 左右的横向斜坡）
 SLOPE_H_MAX = SLOPE_RAMP_W * math.tan(math.radians(SLOPE_DEG))   # 28.1 cm（由 8° 定）
 SLOPE_PLATFORM = 0.30  # 右侧高台宽 [m]，截面 = 直角梯形
 
-# 单边减速带：轴线过渡带宽（作者 2026-11-02 定 0.05 m；横向、非行进方向）
+# 单边减速带：轴线过渡带宽 0.05 m（横向、非行进方向）
 BUMP_AXIS_BAND = 0.05
 
-# 随机起伏的颗粒度（自相关半高宽）：作者 2026-11-02 要求"单个起伏缩小到一半" ⇒ 0.6 → 0.3 m
+# 随机起伏的颗粒度（自相关半高宽）：0.3 m
 RAND_KERNEL = 0.3
 
 # 断崖：gap 的缺口挖到底的深度（掉下去算摔）
@@ -70,7 +70,7 @@ ELEMENTS = [
     ("gap", "断开平台"),
 ]
 
-# 三档参数。L3 = 作者给的目标档（stairs 20/10 cm、gap 平台 10 cm + 断开 10 cm）。
+# 三档参数。L3 = 目标档（stairs 20/10 cm、gap 平台 10 cm + 断开 10 cm）。
 LEVELS = {
     "L1": dict(wave_amp=0.060, wave_lam=(1.0, 1.3), wave_peaks=3, rand_amp=0.02,
                slope_deg=5.0, bump_h=(0.025, 0.035), bump_per_side=3,
@@ -201,7 +201,7 @@ def elem_slope(nx, ny, p, low_at=-1, ramp_w=2.0, plat=0.30, deg=8.0,
                width_m=None, y0_m=0.0, fill_region=False):
     """侧向斜坡（**直角梯形截面**）：左侧一段宽 `ramp_w` 的横向斜坡 → 右侧 `plat` 宽的高台 → 断崖落地。
 
-    作者 2026-11-02 口径：
+    口径：
       · 截面形状 = **直角梯形**：缓坡（斜边）在上，高台（顶边）在下，短直角边贴外墙；
       · 斜坡与平面**平滑过渡**（坡脚、坡顶都做圆角，不是折线）；
       · **坡高由坡度 8° 和坡宽算出**：h = ramp_w · tan(8°)（默认 2.0 m → **28.1 cm**）；
@@ -216,7 +216,7 @@ def elem_slope(nx, ny, p, low_at=-1, ramp_w=2.0, plat=0.30, deg=8.0,
     """
     ramp_n = max(_n(ramp_w), 2)
     plat_n = max(_n(plat), 1)
-    # 【2026-11-02 作者】横向斜坡**填满该区域**（demo 用 `fill_region=True`）：
+    # 横向斜坡**填满该区域**（`fill_region=True` 时）：
     #   斜坡宽 = 区域宽 − 平台宽。元素图里保持固定斜坡宽（2 m），否则 8 m 格会算出 1 m 高的坡。
     if fill_region and width_m is not None:
         ramp_w = max(float(width_m) - float(plat), 0.3)
@@ -256,10 +256,10 @@ def elem_speedbump(nx, ny, p, seed=0, width_m=None):
     """单边减速带：半宽横条，左右**错开布置**、高度随机、一侧 3~4 个。
 
     · 每条横条沿 +x 有 ≤10° 的升/降坡（可通行），沿 y 只覆盖**半宽**；
-    · **轴线附近过渡带 y 向 0.05 m**（作者定）：内侧边缘距轴线 0.025 m，爬满在 0.075 m 处；
+    · **轴线附近过渡带 y 向 0.05 m**：内侧边缘距轴线 0.025 m，爬满在 0.075 m 处；
     · 左右交替：沿 +x 直行时左右轮依次踩到带顶。
 
-    这一项的 0.05 m 过渡是**横向**的、不是行进方向，故不受 10° 缓坡约束（作者 2026-11-02 确认）。
+    这一项的 0.05 m 过渡是**横向**的、不是行进方向，故不受 10° 缓坡约束。
     """
     rng = np.random.default_rng(seed)
     w_m = float(width_m if width_m is not None else ENV_WID)
@@ -307,7 +307,7 @@ def elem_speedbump(nx, ny, p, seed=0, width_m=None):
 def elem_stairs(nx, ny, p):
     """下台阶：斜坡驶上 **h1 平台** → 平台 1 m → 竖直下一级 **h2** → 平台 1 m → 竖直下一级回平地。
 
-    L3 = 20 cm → 10 cm → 0（作者口径）。台阶之间的落差是**竖直面**（作者：离散元素不需要
+    L3 = 20 cm → 10 cm → 0。台阶之间的落差是**竖直面**（离散元素不需要
     高台到地面的过渡，竖直面即可）。
     """
     h1 = float(p.get("stairs_h1", 0.20))
@@ -333,7 +333,7 @@ def elem_stairs(nx, ny, p):
 def elem_gap(nx, ny, p):
     """断开平台：斜坡上 **h 平台** → 平台 1 m → **断开 w**（真断崖：挖到 GAP_DEPTH）→ 平台 1 m → 斜坡回平地。
 
-    L3 = 平台 10 cm、断开 10 cm（作者口径）。断裂处是**竖直面 + 深坑**，掉下去即判定摔。
+    L3 = 平台 10 cm、断开 10 cm。断裂处是**竖直面 + 深坑**，掉下去即判定摔。
     """
     h = float(p.get("gap_h", 0.10))
     w = max(_n(p.get("gap_w", 0.10)), 1)

@@ -36,22 +36,33 @@ def _resolve_spec_path(p, default=None):
 
 
 class MjTelWriter:
-    """【绘图页接 MuJoCo 遥测（P4）】把 SimLoop.rows 增量落成 plot02 口径的 wbr_tel_mj_*.tsv，
-    写进 play02 的遥测目录（WBR_PLAY_DATA 或 <repo>/legged_gym/scripts/wbr_play_data）——
-    bench_plot 的 PATTERNS（wbr_tel_*.tsv）直接命中，绘图页数据层零改动。
-    缺的 Isaac 列（关节力矩/act_h/离地等）不伪造：read_window 只画有数据的系列，缺面板留空。
-    meta 只写 joints=（空）⇒ 不生成 Isaac 的关节面板；time_s/body_z/done 为 Index 必需列。"""
+    """【绘图页接 MuJoCo 遥测（P4）】把 SimLoop.rows 增量落成 plot02 口径的 MJ_*.tsv，
+    写进 play02 的遥测目录（WBR_PLAY_DATA 或 <repo>/legged_gym/scripts/wbr_play_data）。
+    遥测前缀按引擎：MJ_ / Isaac_1_ / Isaac_2_。
+    并补写 Isaac 同名关节列（pos_/vel_/tau_ × tgt/act × 8 dof）
+    与 #joints/#leg_idx/#torque_limits 元数据 ⇒ plot02 关节面板自动生成，两引擎绘图同构。
+    列名与 play02 TSV 完全一致；time_s/body_z/done 为 Index 必需列。"""
 
-    COLS = ["time_s", "body_z", "done", "vz_body", "vx", "vy", "wz", "x", "y",
-            "tgt_vx", "act_vx", "tgt_yaw", "act_yaw", "tgt_roll", "act_roll", "tgt_h",
-            "dbg_ph", "wheel_l", "wheel_r", "tau_max", "tip"]
+    BASE_COLS = ["time_s", "body_z", "done", "vz_body", "vx", "vy", "wz", "x", "y",
+                 "tgt_vx", "act_vx", "tgt_yaw", "act_yaw", "tgt_roll", "act_roll", "tgt_h",
+                 "dbg_ph", "wheel_l", "wheel_r", "tau_max", "tip"]
 
     def __init__(self, loop, ckpt=None):
         d = os.environ.get("WBR_PLAY_DATA") or os.path.join(ROOT, "legged_gym/scripts/wbr_play_data")
         os.makedirs(d, exist_ok=True)
-        self.path = os.path.join(d, "wbr_tel_mj_%s.tsv" % time.strftime("%Y%m%d-%H%M%S"))
+        self.path = os.path.join(d, "MJ_%s.tsv" % time.strftime("%Y%m%d-%H%M%S"))
         self.n = 0
         self._last = 0.0
+        # 关节列：按 #joints（**dof_names 全部 8 个，含 caster**）展开 6 列/dof —— 与 Isaac 完全同构。
+        #   ⚠ 不能用 action_dof_names（6 个，无 caster）：plot02 按 #joints 建面板，
+        #   left_knee_caster_joint 名含 "knee" 会被归为膝类生成 vel 面板，缺列 ⇒ "无该列数据"。
+        self.joints = list(loop.c["dof_names"])
+        jcols = []
+        for _n in self.joints:
+            jcols += [f"pos_tgt__{_n}", f"pos_act__{_n}", f"vel_tgt__{_n}",
+                      f"vel_act__{_n}", f"tau_tgt__{_n}", f"tau_act__{_n}"]
+        self.COLS = self.BASE_COLS + jcols
+        self._jset = set(self.joints)
         it = os.path.splitext(os.path.basename(ckpt or ""))[0].replace("model_", "")
         with open(self.path, "w", encoding="utf-8") as f:
             f.write("#engine=mujoco\n")
@@ -60,7 +71,10 @@ class MjTelWriter:
             if ckpt:
                 f.write("#model_dir=%s\n" % os.path.dirname(ckpt))
                 f.write("#model_iter=%s\n" % (it or "?"))
-            f.write("#joints=\n")
+            f.write("#joints=%s\n" % ",".join(loop.c["dof_names"]))
+            f.write("#leg_idx=%s\n" % ",".join(str(loop.c["dof_names"].index(n))
+                                                for n in loop.c["dof_names"] if n in self._jset and "wheel" not in n and "caster" not in n))
+            f.write("#torque_limits=%s\n" % ",".join(str(v) for v in loop.c["torque_limits"]))
             f.write("\t".join(self.COLS) + "\n")
         print(f"[tel] 绘图遥测：{self.path}", flush=True)
 
@@ -76,12 +90,16 @@ class MjTelWriter:
             for i in range(self.n, n_end):
                 r = loop.rows[i]
                 last = (i == n_end - 1)
-                f.write("\t".join(str(v) for v in (
-                    r["t"], r["z"], 1 if (terminated and last) else 0,
-                    r.get("vz", 0.0), r["vx"], r["vy"], r["wz"], r["x"], r["y"],
-                    r["cmd_vx"], r["vx"], r["cmd_yaw"], r["wz"], r["cmd_roll"], r["roll"],
-                    r["cmd_h"], r.get("dbg_ph", 0), r["wheel_l"], r["wheel_r"], r["tau_max"], r["tip"],
-                )) + "\n")
+                vals = [r["t"], r["z"], 1 if (terminated and last) else 0,
+                        r.get("vz", 0.0), r["vx"], r["vy"], r["wz"], r["x"], r["y"],
+                        r["cmd_vx"], r["vx"], r["cmd_yaw"], r["wz"], r["cmd_roll"], r["roll"],
+                        r["cmd_h"], r.get("dbg_ph", 0), r["wheel_l"], r["wheel_r"], r["tau_max"], r["tip"]]
+                # 关节列（B）：按 self.joints 顺序展开（缺列记 0，理论上都有）
+                for _n in self.joints:
+                    vals += [r.get(f"pos_tgt__{_n}", 0.0), r.get(f"pos_act__{_n}", 0.0),
+                             r.get(f"vel_tgt__{_n}", 0.0), r.get(f"vel_act__{_n}", 0.0),
+                             r.get(f"tau_tgt__{_n}", 0.0), r.get(f"tau_act__{_n}", 0.0)]
+                f.write("\t".join(str(v) for v in vals) + "\n")
         self.n = n_end
 
 
@@ -107,7 +125,12 @@ def main():
                          h_jump=_jump if _jump > 0 else 0.10,
                          vx=_vx if _vx else 0.0,
                          interactive=True,
-                         allow_rise=bool(spec.get("allow_rise", False)),
+                         allow_rise=bool(spec.get("allow_rise", spec.get("start") == "4w")),
+                         # 四轮起步链默认 allow_rise=True（链的存在意义就是起立）——
+                         #   控制台 spec 必须带该键，否则起立被守卫拒绝；显式 False 可关
+                         # P7T2 起立参数（控制台选的槽权重/剖面）从 spec 透传；
+                         #   若不透传 ⇒ 链内硬编码参数，控制台改了不生效
+                         p7t_params=spec.get("p7t_params") or {},
                          terrain=bool(spec.get("terrain", False)))
         loop = chain.loop
         loop.slew = False

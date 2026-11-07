@@ -3,26 +3,26 @@
 # Author    : SYH
 # File      : make_terrain_asset.py
 # Purpose   : 把训练侧预生成的高度图 npz（wbr_p8_demo.npz 等）转成 MuJoCo 部署资产：
-#             ① 生成一份带 <hfield> 的 MJCF（替换 plane 地面）；
-#             ② 生成 .npy 归一化高度数据（运行时写 m.hfield_data，绕开 MuJoCo 的
-#                PNG 加载——实测 3.17 的 <hfield file=...> 对 8/16-bit PNG 都读成 0）。
+# ① 生成一份带 <hfield> 的 MJCF（替换 plane 地面）；
+# ② 生成 .npy 归一化高度数据（运行时写 m.hfield_data，绕开 MuJoCo 的
+# PNG 加载——实测 3.17 的 <hfield file=...> 对 8/16-bit PNG 都读成 0）。
 #
-#   坐标口径（与 legged_gym/utils/terrain.py 的 trimesh/heightfield 对齐）：
-#     npz.height_field_raw : int16，shape (tot_rows, tot_cols)，实际高度 = raw * v_scale
-#     ⚠ 训练侧 npz 的 row=x(length)、col=y(width)；但 MuJoCo <hfield> 的 nrow 沿 **y**、
-#       ncol 沿 **x**（实测：795x570 配 size(28.5,39.75) 才碰撞正常，即 size[0]=ncol*hs/2、
-#       size[1]=nrow*hs/2）。故 data 必须转置后再写 m.hfield_data，否则地形会旋转 90°。
-#     世界原点 = -border_size（x/y 同），机器人出生点 = (-border, -border) + spawn_center_m
-#     MuJoCo <hfield> 的 data 归一化到 [0,1]，z_surface = size[3](base) + size[2](zscale) * data
-#       ⇒ 取 base = z_min，zscale = z_max - z_min，data = (z - z_min)/(z_max - z_min)
-#     nrow/ncol = tot_rows/tot_cols（row 沿 +x，col 沿 +y；与训练侧一致）
-#     size = (Lx/2, Ly/2, zscale, base)，Lx = tot_cols*h_scale, Ly = tot_rows*h_scale
+# 坐标口径（与 legged_gym/utils/terrain.py 的 trimesh/heightfield 对齐）：
+# npz.height_field_raw : int16，shape (tot_rows, tot_cols)，实际高度 = raw * v_scale
+# ⚠ 训练侧 npz 的 row=x(length)、col=y(width)；但 MuJoCo <hfield> 的 nrow 沿 **y**、
+# ncol 沿 **x**（实测：795x570 配 size(28.5,39.75) 才碰撞正常，即 size[0]=ncol*hs/2、
+# size[1]=nrow*hs/2）。故 data 必须转置后再写 m.hfield_data，否则地形会旋转 90°。
+# 世界原点 = -border_size（x/y 同），机器人出生点 = (-border, -border) + spawn_center_m
+# MuJoCo <hfield> 的 data 归一化到 [0,1]，z_surface = size[3](base) + size[2](zscale) * data
+# ⇒ 取 base = z_min，zscale = z_max - z_min，data = (z - z_min)/(z_max - z_min)
+# nrow/ncol = tot_rows/tot_cols（row 沿 +x，col 沿 +y；与训练侧一致）
+# size = (Lx/2, Ly/2, zscale, base)，Lx = tot_cols*h_scale, Ly = tot_rows*h_scale
 #
 # Usage:
-#   python -m legged_gym.scripts.sim2sim_mujoco.tools.make_terrain_asset \
-#       --npz legged_gym/envs/wbr/terrain/release/wbr_p8_demo.npz \
-#       --base legged_gym/scripts/sim2sim_mujoco/assets/mjcf/wbr_v1.xml \
-#       --name wbr_v1_demo
+# python -m legged_gym.scripts.sim2sim_mujoco.tools.make_terrain_asset \
+# --npz legged_gym/envs/wbr/terrain/release/wbr_p8_demo.npz \
+# --base legged_gym/scripts/sim2sim_mujoco/assets/mjcf/wbr_v1.xml \
+# --name wbr_v1_demo
 # ==============================================================================
 
 import argparse
@@ -61,10 +61,10 @@ def build(npz_path, base_xml, name):
     z = hf * vs
     z_min, z_max = float(z.min()), float(z.max())
     span = max(z_max - z_min, 1e-6)
-    # 【公式实测校正 2026-11-06】MuJoCo hfield 表面 = geom.pos_z + size[2]×data（data∈[0,1]）；
-    #   size[3]（base）只是**向下加厚的底座深度**，不是高度加法项（之前误当 +base ⇒ 整场抬高 0.7）。
-    #   ⇒ pos_z = z_min、zscale = span、data = (z-z_min)/span ⇒ 表面恰等于原 npz 高度，
-    #     世界坐标与训练侧/Isaac 完全一致，**不需要任何 z_offset**。base 取 0.5 托住负区。
+    # MuJoCo hfield 表面 = geom.pos_z + size[2]×data（data∈[0,1]）；
+    # size[3]（base）只是**向下加厚的底座深度**，不是高度加法项（之前误当 +base ⇒ 整场抬高 0.7）。
+    # ⇒ pos_z = z_min、zscale = span、data = (z-z_min)/span ⇒ 表面恰等于原 npz 高度，
+    # 世界坐标与训练侧/Isaac 完全一致，**不需要任何 z_offset**。base 取 0.5 托住负区。
     Z_BASE = 0.5
     Z_OFFSET = 0.0
     # npz[z] 是 (row=x, col=y)；MuJoCo PNG 按 (nrow=y, ncol=x) 行优先 ⇒ 转置后写 8-bit 灰度
@@ -81,8 +81,8 @@ def build(npz_path, base_xml, name):
     size = (Lx / 2.0, Ly / 2.0, span, Z_BASE)
 
     # 出生点（世界坐标）：hf 的世界起点是 -border，cell 从 hf 索引 border 开始
-    #   ⇒ cell 内局部米坐标 m 的世界坐标 = -border + border*hs + m = m（与训练侧一致）。
-    #   所以 spawn_center_m 就是世界坐标（demo 里 = (4.0, 3.5) = 中央十字走廊交点）。
+    # ⇒ cell 内局部米坐标 m 的世界坐标 = -border + border*hs + m = m（与训练侧一致）。
+    # 所以 spawn_center_m 就是世界坐标（demo 里 = (4.0, 3.5) = 中央十字走廊交点）。
     sc = meta.get("spawn_center_m") or [0.0, 0.0]
     spawn = (float(sc[0]), float(sc[1]))
     bpx = int(round(border / hs))

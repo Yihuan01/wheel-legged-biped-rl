@@ -31,23 +31,19 @@ The terrain acceptance tasks reuse the `wbr_flat` policy — they are scenes, no
 
 ## Demos
 
+Five behaviours of the same policy weights on both simulation engines
+(Isaac Gym = training-native; MuJoCo = the `sim2sim_mujoco` deployment chain).
+Images and videos will be attached via a GitHub release (`demo-media-v2`) once recorded.
+
+<!-- To be recorded by the author. Suggested naming:
+     fourw-<engine> / twow-<engine> / rise-<engine> / crouch-<engine> / jump-<engine>, engine ∈ {isaac, mujoco} -->
 <table>
-<tr>
-<th>Four-wheel driving (<code>P7F3e</code>)</th>
-<th>Two-wheel walking (<code>P8W7</code>)</th>
-</tr>
-<tr>
-<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/fourw_drive.gif" alt="Four-wheel driving"></td>
-<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/twow_walk.gif" alt="Two-wheel walking"></td>
-</tr>
-<tr>
-<th>Jump (<code>P8J3d</code>)</th>
-<th>Stand-up / lie-down (<code>P7T2</code> script + <code>P7L</code>)</th>
-</tr>
-<tr>
-<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/jump.gif" alt="Jump"></td>
-<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/standup.gif" alt="Stand-up and lie-down"></td>
-</tr>
+<tr><th></th><th>Isaac Gym</th><th>MuJoCo</th></tr>
+<tr><th>Four-wheel driving</th><td></td><td></td></tr>
+<tr><th>Two-wheel walking</th><td></td><td></td></tr>
+<tr><th>Stand-up</th><td></td><td></td></tr>
+<tr><th>Lie-down (crouch)</th><td></td><td></td></tr>
+<tr><th>Jump</th><td></td><td></td></tr>
 </table>
 
 ## Web console
@@ -59,8 +55,8 @@ The terrain acceptance tasks reuse the `wbr_flat` policy — they are scenes, no
 - **Simulation run** — start / stop, live command sliders (Vx / Yaw / Height / Roll / Jump);
   in chain mode one-click stand-up / lie-down / load-jump / back-to-two-wheel / back-to-four-wheel /
   reset / slot-switch, with a command feedback bar and a settle gate (|vx|≤0.08 ∧ |pitch|≤5.7° for
-  8 consecutive steps before any network switch), GPU status, and a dock for the native Isaac window.
-- **IsaacGym configuration / MuJoCo configuration** — slot-based: four-wheel 164 / two-wheel walk 161 /
+  8 consecutive steps before any network switch), GPU status, and a dock for the native Isaac window; with MuJoCo the 3D viewport is embedded in the page.
+- **Configure Isaac / Configure MuJoCo** — slot-based: four-wheel 164 / two-wheel walk 161 /
   two-wheel jump 161 / lie-down 173 / five-slot chain (2-wheel or 4-wheel start), each slot one
   contract + asset + checkpoint; the MuJoCo chain supports a complex-terrain (four-quadrant demo) map;
   stand-up via the P7T2 script chain (default) or the P7S learned policy; per-phase timing parameters.
@@ -68,23 +64,15 @@ The terrain acceptance tasks reuse the `wbr_flat` policy — they are scenes, no
   running simulation or a saved TSV log.
 - **Reference** — parameter glossary, shortcuts and storage paths.
 
+<!-- To be captured by the author: console_run_isaac / console_run_mj / console_cfg_isaac /
+     console_cfg_mj / console_plot / console_help (.png) -->
 <table>
-<tr>
-<th>Simulation run</th>
-<th>Model configuration</th>
-</tr>
-<tr>
-<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-run.png" alt="Simulation run"></td>
-<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-model.png" alt="Model configuration"></td>
-</tr>
-<tr>
-<th>Telemetry plots</th>
-<th>Reference</th>
-</tr>
-<tr>
-<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-plot.png" alt="Telemetry plots"></td>
-<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-help.png" alt="Reference"></td>
-</tr>
+<tr><th>Simulation run · Isaac Gym</th><th>Simulation run · MuJoCo</th></tr>
+<tr><td></td><td></td></tr>
+<tr><th>Configure Isaac</th><th>Configure MuJoCo</th></tr>
+<tr><td></td><td></td></tr>
+<tr><th>Telemetry plots</th><th>Reference</th></tr>
+<tr><td></td><td></td></tr>
 </table>
 
 ## Requirements

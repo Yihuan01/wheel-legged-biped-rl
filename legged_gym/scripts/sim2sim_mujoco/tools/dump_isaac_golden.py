@@ -83,7 +83,7 @@ def run_scenario(env, pol, rec, name, vx, yaw, h, steps, h2=None, switch=100, ju
     # reset 的 obs 用的是随机指令；置好指令后重算一次，保证第 0 帧与后续帧同口径
     env.compute_observations()
     if name == "lie":
-        # 【S2c 趴下·A 口径】作者裁决：接受 switch env 的 off=0（obs[159]=0、无 additive）。
+        # 【S2c 趴下·A 口径】接受 switch env 的 off=0（obs[159]=0、无 additive）。
         # 运行语义＝console 五槽链：playback_hold＋外部趴下时序脚本，策略（P7L@300）跟随相位。
         env.playback_hold = True
         env._reset_root_states(torch.tensor([0], device=env.device))

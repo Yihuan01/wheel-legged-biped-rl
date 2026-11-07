@@ -146,8 +146,8 @@ class LeggedRobot(BaseTask):
         self.last_dof_vel[:] = self.dof_vel[:]
         self.last_root_vel[:] = self.root_states[:, 7:13]
 
-        # 【2026-10-29】贴地高度着色网格（纯 viewer 可视化；`terrain.grid.enable=False` 时是空操作）
-        # 【2026-11-01】顺序调整：debug 绘制里的 clear_lines 会擦掉先画的网格 ⇒ debug 先画、grid 后画
+        # 贴地高度着色网格（纯 viewer 可视化；`terrain.grid.enable=False` 时是空操作）
+        # debug 绘制里的 clear_lines 会擦掉先画的网格 ⇒ 必须先画 debug、后画 grid
         if self.viewer and self.enable_viewer_sync and self.debug_viz:
             self._draw_debug_vis()
         if self.viewer and self.enable_viewer_sync:
@@ -330,11 +330,11 @@ class LeggedRobot(BaseTask):
 
     def _process_rigid_body_props(self, props, env_id):
         # if env_id==0:
-        #     sum = 0
-        #     for i, p in enumerate(props):
-        #         sum += p.mass
-        #         print(f"Mass of body {i}: {p.mass} (before randomization)")
-        #     print(f"Total mass {sum} (before randomization)")
+        # sum = 0
+        # for i, p in enumerate(props):
+        # sum += p.mass
+        # print(f"Mass of body {i}: {p.mass} (before randomization)")
+        # print(f"Total mass {sum} (before randomization)")
         # randomize base mass
         if self.cfg.domain_rand.randomize_base_mass:
             rng = self.cfg.domain_rand.added_mass_range
@@ -824,9 +824,8 @@ class LeggedRobot(BaseTask):
         r = float(getattr(cfg, "radius", 5.0))        # 半径 [m]
         sub = float(getattr(cfg, "subdiv", 0.25))     # 每段细分 [m]：越小越贴地形
         self._grid_n = int(2 * round(r / s) + 1)
-        # 【2026-11-01 修 bug】k 是"整条线（长 2r）的分段数"，此前误写成 round(s/sub)：
-        #   s=0.5/sub=0.25 时 k=2 ⇒ 每条 12 m 线只有 2 段 6 m 直弦，中段悬空/穿模、颜色取弦中点，
-        #   这正是"起伏看不出来"的主因。正确口径：段长 ≈ subdiv ⇒ k = 2r/sub。
+        # k 是"整条线（长 2r）的分段数"：段长必须 ≈ subdiv ⇒ k = 2r/sub。k 过小
+        # （如 2）时 12 m 线只剩 2 段直弦 ⇒ 中段悬空/穿模、颜色取弦中点，起伏看不出。
         k = max(int(round(2 * r / sub)), 1)
         t = np.linspace(0.0, 1.0, k + 1)
         off = (np.arange(self._grid_n) - (self._grid_n - 1) / 2.0) * s
@@ -894,7 +893,7 @@ class LeggedRobot(BaseTask):
                 gymapi.Vec3(*li),
                 gymapi.Vec3(*getattr(self.cfg.viewer, "light_ambient", [0.55] * 3)),
                 gymapi.Vec3(*getattr(self.cfg.viewer, "light_direction", [-0.6, 0.6, -0.55])))
-            # 【2026-11-01】第二盏方向光（低角度反侧补光）：None = 不设（保持出厂）
+            # 第二盏方向光（低角度反侧补光）：None = 不设（保持出厂）
             li2 = getattr(self.cfg.viewer, "light2_intensity", None)
             if li2 is not None:
                 self.gym.set_light_parameters(

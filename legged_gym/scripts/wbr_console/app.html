@@ -132,16 +132,16 @@
         <div class="plot-grid" id="plotGrid"></div>
       </section>
 
-      <!-- ======================= 页面 3：IsaacGym 配置 ======================= -->
+      <!-- ======================= 页面 3：配置Isaac ======================= -->
       <section class="page" data-page="model" id="page-model">
         <div class="pagehead">
-          <h3>IsaacGym 配置</h3>
+          <h3>配置Isaac</h3>
           <span class="muted" style="font-size:.76rem">当前模式：<b id="modelModeName">双模式</b></span>
           <span class="spacer"></span>
           <span class="engine-badge lit is-isaac">● ENGINE: Isaac Gym</span>
-          <button class="btn" id="btnCheck2" data-mj-locked data-mj-why="MuJoCo 请用「MuJoCo 配置页」配置与启动">预检</button>
+          <button class="btn" id="btnCheck2" data-mj-locked data-mj-why="MuJoCo 请用「配置MJ」页配置与启动">预检</button>
           <button class="btn" id="btnSaveScenario" data-mj-locked data-mj-why="场景/槽位为 Isaac 专属">保存场景</button>
-          <button class="btn pri" id="btnStart2" data-mj-locked data-mj-why="MuJoCo 请用「MuJoCo 配置页」配置与启动">启动仿真</button>
+          <button class="btn pri" id="btnStart2" data-mj-locked data-mj-why="MuJoCo 请用「配置MJ」页配置与启动">启动仿真</button>
         </div>
 
         <div class="box pf-wide">
@@ -163,7 +163,7 @@
             </div>
           </aside>
 
-          <!-- 右栏：IsaacGym 配置 —— 双模式（上）/ 单策略（下）两个分区，各带标题栏分隔 -->
+          <!-- 右栏：配置Isaac —— 双模式（上）/ 单策略（下）两个分区，各带标题栏分隔 -->
           <div class="model-main">
             <section class="cfg-card" data-mode="uni">
               <div class="cfg-head">
@@ -179,7 +179,8 @@
                   <h5>起立方式
                     <select class="input pin sel" id="standupModeSel" style="margin-left:8px;width:auto">
                       <option value="p7s">模型（P7S 学习策略）</option>
-                      <option value="trad">传统控制（P7T 脚本链）</option>
+                      <option value="trad">传统控制（P7T 恒力矩）</option>
+                      <option value="script">相位脚本（P7T2 俯仰PD+速度回馈）</option>
                     </select>
                   </h5>
                 </div>
@@ -224,10 +225,10 @@
         </div>
       </section>
 
-      <!-- ======================= 页面 4.5：MuJoCo 配置（Sim2Sim） ======================= -->
+      <!-- ======================= 页面 4.5：配置MJ（Sim2Sim） ======================= -->
       <section class="page" data-page="mujoco" id="page-mujoco">
         <div class="pagehead">
-          <h3>MuJoCo 配置</h3>
+          <h3>配置MJ</h3>
           <span class="muted" style="font-size:.76rem">槽位化：四轮 164 / 两轮行走 161 / 两轮跳跃 161 / 趴下 173 / 五槽链 · 纯 CPU 可与训练并行 · 与运行页共用同一份设置</span>
           <span class="spacer"></span>
           <span class="engine-badge lit is-mujoco">● ENGINE: MuJoCo</span>
@@ -246,15 +247,8 @@
             <h4>模型与资产</h4>
             <div class="bd">
               <div class="mj-row">
-                <label class="mjf wide"><span>槽位（每个槽＝一套契约＋资产＋权重；链＝四槽连跑）</span>
-                  <select class="input" id="cfxSlot">
-                    <option value="four">① 四轮行驶 · 164（P7F3e · wbr_v2）</option>
-                    <option value="two">② 两轮行走 · 161（P8W7 · wbr_v1）</option>
-                    <option value="jump">③ 两轮跳跃 · 161（P8J3d · wbr_v1）</option>
-                    <option value="lie">④ 趴下 · 173（P7L · wbr_v2）</option>
-                    <option value="uni">⛓ 五槽链 · 两轮起步（行走→跳→趴下→四轮）</option>
-                    <option value="uni4">⛓ 五槽链 · 四轮起步（含 P7T2 平台式起立）</option>
-                  </select>
+                <label class="mjf wide" style="flex:1 1 100%"><span>槽位（每个槽＝一套契约＋资产＋权重；链＝四槽连跑；点选切换）</span>
+                  <div class="slotpick" id="cfxSlotPick"></div>
                 </label>
                 <label class="mjf" id="cfxChainBox" hidden><span>链起始</span>
                   <select class="input" id="cfxChainStart">
@@ -264,12 +258,13 @@
                 </label>
                 <label class="tgl" id="cfxTerrainBox" hidden title="两轮行走槽接 wbr_p8_demo 四象限复杂地形（波浪/斜坡/减速带/台阶/断开平台）"><input type="checkbox" id="cfxTerrain"> 复杂地形（demo）</label>
               </div>
-              <div class="mj-row">
+              <!-- 两个下拉全模式平铺；链模式置灰（链内固定权重） -->
+              <div class="mj-row" id="cfxReleaseRow">
                 <label class="mjf wide"><span>release（默认取契约冻结的交付）</span>
                   <select class="input" id="cfxRelease"></select>
                 </label>
               </div>
-              <div class="mj-row">
+              <div class="mj-row" id="cfxCustomRow">
                 <label class="mjf wide"><span>自定义 .pt（绝对路径，填写则覆盖上面的 release）</span>
                   <input class="input" type="text" id="cfxCustomPt" placeholder="/home/syh/code/Wheel_legged_gym/logs/.../model_XXXX.pt">
                 </label>
@@ -280,6 +275,7 @@
                 </label>
                 <span class="badge" id="cfxMjcfSha" title="生成物 sha256 前 8 位">sha —</span>
               </div>
+              <div class="mj-sec">契约要点</div>
               <div class="kv" id="cfxContract">契约：—</div>
             </div>
           </div>
@@ -287,24 +283,20 @@
           <div class="box mj-box">
             <h4>场景与运行</h4>
             <div class="bd">
+              <!-- 指令（预设+五路）与 运行（时长/倍速/录制）分区；
+                   Roll/Jump 不可用的槽位整格隐藏 -->
+              <div class="mj-sec">指令</div>
               <div class="mj-row">
                 <label class="mjf"><span>场景预设</span>
-                  <select class="input" id="cfxPreset">
-                    <option value="stand">站定 0.19</option>
-                    <option value="walk03">走 0.3</option>
-                    <option value="walk06">走 0.6</option>
-                    <option value="h0175">高度 0.175</option>
-                    <option value="h023">高度 0.23</option>
-                    <option value="h0245">高度 0.245</option>
-                    <option value="yaw05">转向 0.5</option>
-                  </select>
+                  <select class="input" id="cfxPreset"></select>
                 </label>
-                <label class="mjf"><span>Vx m/s</span><input class="input" type="number" id="cfxVx" step="0.05" value="0"></label>
-                <label class="mjf"><span>Yaw rad/s</span><input class="input" type="number" id="cfxYaw" step="0.05" value="0"></label>
-                <label class="mjf"><span>Height m</span><input class="input" type="number" id="cfxH" step="0.005" min="0.175" max="0.245" value="0.19"></label>
-                <label class="mjf"><span>Roll</span><input class="input" type="number" id="cfxRoll" step="0.02" value="0" disabled title="四轮 roll 指令范围 [0, 0]（退化置灰）"></label>
-                <label class="mjf"><span>Jump m（跳跃槽/链）</span><input class="input" type="number" id="cfxJump" step="0.01" min="0.05" max="0.15" value="0.10"></label>
+                <label class="mjf" id="cfxVxBox"><span>Vx m/s</span><input class="input" type="number" id="cfxVx" step="0.05" value="0"></label>
+                <label class="mjf" id="cfxYawBox"><span>Yaw rad/s</span><input class="input" type="number" id="cfxYaw" step="0.05" value="0"></label>
+                <label class="mjf" id="cfxHBox"><span>Height m</span><input class="input" type="number" id="cfxH" step="0.005" min="0.175" max="0.245" value="0.195"></label>
+                <label class="mjf" id="cfxRollBox" hidden title="当前槽位不支持 roll 指令"><span>Roll</span><input class="input" type="number" id="cfxRoll" step="0.02" value="0"></label>
+                <label class="mjf" id="cfxJumpBox" hidden title="当前槽位不支持跳跃指令"><span>Jump m</span><input class="input" type="number" id="cfxJump" step="0.01" min="0.05" max="0.15" value="0.10"></label>
               </div>
+              <div class="mj-sec">运行</div>
               <div class="mj-row">
                 <label class="mjf"><span>时长 s（0＝不限时）</span><input class="input" type="number" id="cfxDur" step="5" min="0" value="0"></label>
                 <label class="mjf"><span>回放倍速</span>
@@ -317,13 +309,10 @@
                 <label class="tgl"><input type="checkbox" id="cfxRecord" checked> 录制 TSV</label>
                 <label class="tgl"><input type="checkbox" id="cfxWindow" checked> 开窗口</label>
               </div>
-              <div class="kv muted" style="font-size:.7rem">初始姿态＝MJCF 契约初值（四轮 0.19 / 两轮 0.25）；录制落 <span class="mono">sim2sim_mujoco/eval/runs/</span>，导出图按该目录取最新。</div>
+              <div class="kv muted" style="font-size:.7rem">初始姿态＝MJCF 契约初值（四轮 0.195 / 两轮 0.25）；录制落 <span class="mono">sim2sim_mujoco/eval/runs/</span>，导出图按该目录取最新。</div>
             </div>
           </div>
-      <div class="box mj-box span2">
-        <h4>上次 S0 对账（静态链路三对齐，golden 只读）</h4>
-        <div class="bd"><div class="kv" id="cfxParity">读取中…</div></div>
-      </div>
+
         </div>
 
 
@@ -340,23 +329,23 @@
           <div class="box">
             <h4>参数说明</h4>
             <div class="usedoc">
-              <div class="drow"><b>起立方案</b><span><code>P7T2</code>（默认）＝平台式脚本链：静稳→折蹲→伸腿→<b>C 平滑淡出甩＋全程阻尼接</b>（<code>lift_profile=p7t2</code>）→前倾侧进带驻留交棒→DONE 阻尼保持；<code>const</code>＝旧恒力矩 C＋pitch 事件交棒（回退选项）；<code>P7S</code>＝学习策略相位机（<code>t_align / t_rise / t_handover</code> 与腿 P 倍率可调）。三者在配置页 <code>standup_mode</code> + 场景参数选择。</span></div>
+              <div class="drow"><b>起立方案</b><span><code>P7T2</code>（默认，<code>standup_mode=script/trad</code>）＝脚本链：静稳→折蹲→伸腿→<b>俯仰 PD ＋ 线速度回馈</b>（<code>u = −(kp·pitch + kd·rate) + kv·vx</code>，pitch 正=后仰；pitch 大时 PD 自然饱和成"甩"，无需单独冲量段）→ <b>三闸驻留交棒</b>（|pitch|≤20° ∧ |rate|≤1.0 ∧ |vx|≤0.6，满 0.1 s）→ DONE；<code>const</code>＝旧恒力矩 C＋pitch 事件交棒（回退选项）；<code>P7S</code>＝学习策略相位机（<code>t_align / t_rise / t_handover</code> 与腿 P 倍率可调）。</span></div>
               <div class="drow"><b>相位时长</b><span><code>t_align / t_rise / t_handover / t_lower / t_tilt / t_absorb</code>：起立与趴下各相位持续时间（秒），写入 <code>env.sw</code>，重启生效。</span></div>
-              <div class="drow"><b>传统起立参数</b><span>静稳/折蹲/蹲稳/伸腿时长、抬升超时上限、恒定轮力矩 C、伸腿腿 P 倍率、交 W3 体高与保持时长；<code>standup_mode=script</code> 时生效（引擎 <code>RiseScript</code>，剖面见 <code>rise_script.py</code>）。</span></div>
+              <div class="drow"><b>相位脚本起立参数</b><span>静稳/折蹲/蹲稳/伸腿时长、抬升超时上限、<b>俯仰 P/D</b>、<b>速度回馈 kv</b>、<b>交棒 |vx| 闸</b>、伸腿量/腿 P 倍率、轮力矩上限、交 W3 体高与保持时长；<code>standup_mode=script</code>、或 MuJoCo 五槽链时生效（引擎 <code>RiseScript</code> / <code>p7t2_platform_standup.py</code>）。两引擎同一套律；缺省值 Isaac kp 12 / kd 3 / kv 14（MuJoCo 14/4/10，且对控制台传入值钳位）。</span></div>
               <div class="drow"><b>五路指令</b><span><code>vx</code> 前进线速度、<code>yaw</code> 偏航角速度、<code>height</code> 躯干目标高度、<code>roll</code> 侧倾压弯角、<code>jump</code> 跳跃升高量。滑块量程随<b>当前槽位/模型</b>变化；MuJoCo 链模式下 height/roll/jump 由各槽契约接管（面板实时下发 vx/yaw/roll）。</span></div>
-              <div class="drow"><b>MuJoCo 配置页</b><span>槽位下拉（四轮 164／两轮行走 161／两轮跳跃 161／趴下 173／五槽链两轮或四轮起步）＋「复杂地形（demo）」勾选（四象限地形＋中央十字走廊，出生点 (4.0, 3.5)；默认勾选）；「时长」＝会话总保险超时。</span></div>
+              <div class="drow"><b>配置MJ 页</b><span>槽位下拉（四轮 164／两轮行走 161／两轮跳跃 161／趴下 173／五槽链两轮或四轮起步）＋「复杂地形（demo）」勾选（四象限地形＋中央十字走廊，出生点 (4.0, 3.5)；默认勾选）；「时长」＝会话总保险超时。</span></div>
             </div>
           </div>
 
           <div class="box">
             <h4>功能说明</h4>
             <div class="usedoc">
-              <div class="drow"><b>引擎切换</b><span>配置页 <code>[Isaac Gym│MuJoCo]</code> 分段。MuJoCo：免 Isaac 初始化、六槽单跑或整链、确定性停止（≤0.5 s）；Isaac：训练同源引擎，支持原生窗口停靠。</span></div>
+              <div class="drow"><b>引擎切换</b><span>配置页 <code>[配置Isaac│配置MJ]</code> 分段。MuJoCo：免 Isaac 初始化、六槽单跑或整链、确定性停止（≤0.5 s）；Isaac：训练同源引擎，支持原生窗口停靠。</span></div>
               <div class="drow"><b>启动 / 停止 / 校验</b><span>「校验」＝启动预检（链模式逐槽核对权重 obs 维度、MJCF/资产 sha、桥端口、显卡、训练进程）；「启动仿真」按当前模式拉起对应引擎；「停止」结束仿真。</span></div>
               <div class="drow"><b>链指令（起立/趴下/装填跳/回两轮/回四轮/复位/切槽）</b><span>链模式下按守卫表动态解禁，点击经 <code>/api/action</code> 下发；<b>指令回执条</b>显示当前槽/相位、接受与拒绝原因、事件流。过渡请求过<b>站定门</b>（|vx|≤0.08 ∧ |pitch|≤5.7° 连续 8 拍，超时 1.5 s 兜底）再切网——任意时刻硬切网会让策略吃分布外输入翻倒。</span></div>
               <div class="drow"><b>装填跳 / 连跳</b><span>两轮跳跃槽与链模式可跳：跳跃高度<b>行走时预设、装填时下发</b>（触发键 <code>H</code>；策略对高度非线性跟随属已知能力边界）；「连跳」为自动循环。</span></div>
               <div class="drow"><b>场景 / 检查点库</b><span><b>双击</b>条目加载；笔＝覆写、垃圾桶＝删除。场景现两条：<code>WBR统一五槽_P8</code>（当前交付五槽：F3e＋P7T2 脚本起立＋P8W7 行走＋P8J3d 跳跃＋P7L 趴下）与 <code>P7T_脚本起立R81</code>（10-28/11-06 验收对照，两轮槽为 R81）。</span></div>
-              <div class="drow"><b>数据绘图（两引擎通用）</b><span>Isaac <code>wbr_tel_*/wbr_switch_tel_*</code> 与 MuJoCo <code>wbr_tel_mj_*</code>（serve 增量落盘、运行中可跟随）同列：指令三线/竖直速度/高度跟随/跳跃/<b>相位底色</b>；MuJoCo 日志缺 Isaac 关节列，对应面板留空。相位图纵轴只印数字（0–11），鼠标扫过标题浮出中文对照。</span></div>
+              <div class="drow"><b>数据绘图（两引擎通用）</b><span>日志前缀 <code>Isaac_1_</code>（单策略）/<code>Isaac_2_</code>（双模式）/<code>MJ_</code>（MuJoCo）三段（serve 增量落盘、运行中可跟随；旧前缀 <code>wbr_tel_*</code> 兼容显示）；两引擎<b>同列同面板</b>：指令三线/竖直速度/高度跟随/跳跃/<b>相位底色</b>/<b>关节位置·速度·扭矩</b>。相位图纵轴只印数字（0–11），鼠标扫过标题浮出中文对照。</span></div>
               <div class="drow"><b>原生窗口停靠</b><span>Isaac 专属：原生窗口去边框置顶覆盖视口，需真实浏览器窗口；MuJoCo 视口为网页内嵌渲染。</span></div>
             </div>
           </div>
@@ -374,7 +363,7 @@
               <span class="kbd">空格</span><span>指令重置到当前模式默认位</span>
               <span class="kbd">M</span><span>切换 四轮 / 起立 / 两轮 / 趴下（链模式＝切槽请求）</span>
               <span class="kbd">R</span><span>复位（回四轮起点）</span>
-              <span class="kbd">1 2 3 4 5</span><span>切到 仿真运行 / IsaacGym 配置 / MuJoCo 配置 / 数据绘图 / 使用说明</span>
+              <span class="kbd">1 2 3 4 5</span><span>切到 仿真运行 / 配置Isaac / 配置MJ / 数据绘图 / 使用说明</span>
             </div>
           </div>
 
@@ -384,7 +373,7 @@
               <div class="drow"><b>场景</b><span><span class="mono">wbr_bench_store/scenarios/&lt;名称&gt;.json</span> <span class="muted">（git 跟踪）</span></span></div>
               <div class="drow"><b>固化检查点</b><span><span class="mono">wbr_bench_store/saved/</span></span></div>
               <div class="drow"><b>运行日志</b><span><span class="mono">wbr_bench_store/runs/&lt;时间戳&gt;_&lt;引擎&gt;/console.log</span> <span class="muted">（每次启动自动重建）</span></span></div>
-              <div class="drow"><b>遥测数据</b><span>Isaac：<span class="mono">wbr_play_data/wbr_tel_isaac_&lt;时间戳&gt;.tsv</span>、<span class="mono">wbr_switch_tel_isaac_&lt;时间戳&gt;.tsv</span>；MuJoCo：<span class="mono">wbr_tel_mj_&lt;时间戳&gt;.tsv</span> <span class="muted">（文件名自带引擎标注）</span></span></div>
+              <div class="drow"><b>遥测数据</b><span>Isaac：<span class="mono">wbr_play_data/Isaac_1_&lt;时间戳&gt;.tsv</span>（单策略）、<span class="mono">Isaac_2_&lt;时间戳&gt;.tsv</span>（双模式）；MuJoCo：<span class="mono">MJ_&lt;时间戳&gt;.tsv</span>（旧前缀 wbr_tel_* 兼容显示）</span></div>
               <div class="drow"><b>MuJoCo 落盘</b><span><span class="mono">sim2sim_mujoco/eval/runs/&lt;时间戳&gt;/</span> <span class="muted">（telemetry.tsv＋summary.json）</span></span></div>
               <div class="drow"><b>部署清单</b><span><span class="mono">sim2sim_mujoco/assets/DEPLOY_MANIFEST.json</span> <span class="muted">（重跑 tools/make_manifest.py 再生）</span></span></div>
               <div class="drow"><b>权重</b><span><span class="mono">releases/&lt;实验&gt;/model_&lt;迭代&gt;.pt</span> ＋ <span class="mono">logs/&lt;task&gt;/&lt;run&gt;/model_*.pt</span></span></div>

@@ -399,7 +399,7 @@ def dock(x, y, w, h, match=None, borderless=True):
 def undock(match=None):
     match = match or _DEFAULT_MATCH[0]
     # ⚠【P8 五槽】不能 hide()（XUnmapWindow）：对 GL/Vulkan 窗口 unmap 会摧毁渲染上下文
-    #   ⇒ 仿真变 headless、窗口从此消失（11-04 作者实测：最小化浏览器后视口消失）。
+    #   ⇒ 仿真变 headless、窗口从此消失。
     #   降下＝只降层级（set_above False，窗口退到后面保持映射），GL 存活；重停靠时再置顶。
     with _lock():
         w_id = find_window(match)

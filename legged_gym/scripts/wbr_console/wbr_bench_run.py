@@ -105,7 +105,11 @@ def main():
     #   不改 play02.py —— 仅替换其 _build_switch 的返回对象。single 档无此概念，跳过。
     _PHASE_KEYS = ("t_align", "t_rise", "t_handover", "t_lower", "t_tilt", "t_absorb")
     _TRAD_KEYS = ("t_trad_hold", "t_trad_crouch", "t_trad_crouch_hold", "t_trad_extend",
-                  "t_trad_lift_max", "trad_torque", "trad_boost", "trad_hcmd", "trad_hcmd_hold")
+                  "t_trad_lift_max", "trad_torque", "trad_boost", "trad_hcmd", "trad_hcmd_hold",
+                  # P7T2 轮矩律（俯仰 PD ＋ 线速度回馈）
+                  "trad_kp_pitch", "trad_kd_pitch", "trad_kv_vx", "trad_vx_tol",
+                  "trad_extend_retract", "trad_extend_boost",
+                  "trad_band_pitch_tol", "trad_band_rate_tol", "trad_band_dwell")
     params = spec.get("params") or {}
     if spec.get("mode") in ("switch", "uni"):
         _orig_build = play02._build_switch
@@ -159,6 +163,19 @@ def main():
             if _adv is not None and str(_adv).strip():
                 setattr(sw, "trad_advance", str(_adv).strip().lower())
                 applied["trad_advance"] = str(_adv).strip().lower()
+            _lp = params.get("trad_lift_profile")
+            if _lp is not None and str(_lp).strip():
+                setattr(sw, "trad_lift_profile", str(_lp).strip().lower())
+                applied["trad_lift_profile"] = str(_lp).strip().lower()
+            _p2w = params.get("trad_pose_2w")
+            if _p2w is not None:
+                try:
+                    _p2w = [float(x) for x in _p2w][:4]
+                    if len(_p2w) == 4:
+                        setattr(sw, "trad_pose_2w", _p2w)
+                        applied["trad_pose_2w"] = _p2w
+                except (TypeError, ValueError):
+                    pass
             _zh = params.get("trad_z_handover_min")
             if _zh is not None:
                 try:

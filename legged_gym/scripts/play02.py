@@ -3,28 +3,28 @@
 # Author    : SYH
 # File      : play02.py
 # Purpose   : 遥测采集端：面板下发指令（支持键盘步进）→ 每控制步采样 → 每 10 s 落一个 TSV
-#             数据段；画图交给 plot02.py。--play_mode single 跑单策略，switch 用单个 wbr_switch
-#             env 承载四轮 / 起立 / 两轮站立三个策略。
+# 数据段；画图交给 plot02.py。--play_mode single 跑单策略，switch 用单个 wbr_switch
+# env 承载四轮 / 起立 / 两轮站立三个策略。
 # ==============================================================================
 
-#   已加（本轮）：wbr.py::dbg_snapshot(env_idx) —— 目标层只读快照出口，纯读、不进任何计算路径。
-#     本脚本据此多存 16 列 dbg_*，把"指令 → 目标"被谁改了口拆开记：
-#       dbg_yaw_raw / dbg_yaw_tgt / dbg_yaw_clipped / dbg_yaw_cap  包络（ω ≤ expand·(b − k·|v|)）
-#       dbg_roll_base / dbg_roll_tilt / dbg_roll_tgt               压弯前馈合成
-#       dbg_h_ik_in / dbg_h_ceiling                                喂给 IK 的高度与几何上限
-#       dbg_knee_tgt_l / _r, dbg_roll_delta, dbg_ff_gain           解算器膝角目标与差动量
-#       dbg_hip_allow_l / _r, dbg_hip_over                         髋可达门限与是否越限
-#     ⚠️ 陈旧零陷阱：dbg 里约一半字段由奖励通路里的 _compute_target_knee_angles / _reward_hip_reach 写，
-#     开关（flags.enable_leg_adjust、scales.z_adjust_leg、scales.hip_reach）一关就返回**没算过的 0**，
-#     读到 0 先确认开关。当前配置三项都开 ⇒ play 里是新鲜的。
-#   未加（够用，暂不动）：
-#     B) debug_* 每个物理子步写一次，一个控制步（decimation=2）被覆盖两次 ⇒ 落盘的是最后一个子步的
-#        dof_pos/dof_vel；目标量（actions_scaled/raw_tau）子步间不变，无影响。
-#     C) 腿部 PD 无速度目标项 ⇒ vel_tgt__<腿> 恒为 0，是结构常量不是采样值；腿的有效数据在
-#        pos_tgt__/pos_act__ 与 tau_tgt__/tau_act__，轮子的在 vel_tgt__/vel_act__ 与 tau_*。
-#     D) act_h 是脚本内按奖励公式重算的（纯 dof_pos 闭式，无历史依赖 ⇒ 重算安全）。解算器一旦改成
-#        依赖历史状态，就该由 env 出 dbg["leg_extension"]。
-#     A) debug_* 只导出 0 号机器人 —— 按用户决定保留一台，不加接口。
+# 已加（本轮）：wbr.py::dbg_snapshot(env_idx) —— 目标层只读快照出口，纯读、不进任何计算路径。
+# 本脚本据此多存 16 列 dbg_*，把"指令 → 目标"被谁改了口拆开记：
+# dbg_yaw_raw / dbg_yaw_tgt / dbg_yaw_clipped / dbg_yaw_cap  包络（ω ≤ expand·(b − k·|v|)）
+# dbg_roll_base / dbg_roll_tilt / dbg_roll_tgt               压弯前馈合成
+# dbg_h_ik_in / dbg_h_ceiling                                喂给 IK 的高度与几何上限
+# dbg_knee_tgt_l / _r, dbg_roll_delta, dbg_ff_gain           解算器膝角目标与差动量
+# dbg_hip_allow_l / _r, dbg_hip_over                         髋可达门限与是否越限
+# ⚠️ 陈旧零陷阱：dbg 里约一半字段由奖励通路里的 _compute_target_knee_angles / _reward_hip_reach 写，
+# 开关（flags.enable_leg_adjust、scales.z_adjust_leg、scales.hip_reach）一关就返回**没算过的 0**，
+# 读到 0 先确认开关。当前配置三项都开 ⇒ play 里是新鲜的。
+# 未加（够用，暂不动）：
+# B) debug_* 每个物理子步写一次，一个控制步（decimation=2）被覆盖两次 ⇒ 落盘的是最后一个子步的
+# dof_pos/dof_vel；目标量（actions_scaled/raw_tau）子步间不变，无影响。
+# C) 腿部 PD 无速度目标项 ⇒ vel_tgt__<腿> 恒为 0，是结构常量不是采样值；腿的有效数据在
+# pos_tgt__/pos_act__ 与 tau_tgt__/tau_act__，轮子的在 vel_tgt__/vel_act__ 与 tau_*。
+# D) act_h 是脚本内按奖励公式重算的（纯 dof_pos 闭式，无历史依赖 ⇒ 重算安全）。解算器一旦改成
+# 依赖历史状态，就该由 env 出 dbg["leg_extension"]。
+# A) debug_* 只导出 0 号机器人（单机固定，无多机接口）。
 # ==============================================================================
 
 import os
@@ -65,8 +65,8 @@ CHANNELS = (
          label='滚转压弯角 (rad)',      rng='ang_roll',    step=0.02,
          inc=('l',),        dec=('j',),        hint='J / L'),
     # 第五路 = 跳跃指令（离地后机身上升量，0 = 不跳）。
-    #   滑块只管"要多高"，跳不跳由空格 / 跳跃按钮触发；env 相位机只在装填状态下才吃这条指令。
-    #   上限取 cfg.jump_height，下限放到 0 ⇒ 面板量程 [0, 0.15]。
+    # 滑块只管"要多高"，跳不跳由空格 / 跳跃按钮触发；env 相位机只在装填状态下才吃这条指令。
+    # 上限取 cfg.jump_height，下限放到 0 ⇒ 面板量程 [0, 0.15]。
     dict(key='jump_height', short='jump', name='跳跃升高', unit='m',
          label='跳跃指令·升高量 (m)', rng='jump_height', step=0.01, zero_ok=True,
          inc=('o',),        dec=('u',),        hint='U / O'),
@@ -96,13 +96,13 @@ GUI_DEFAULTS = {'lin_vel_x': 0.0, 'ang_vel_yaw': 0.0, 'base_height': 0.25, 'ang_
 gui_cmds = dict(GUI_DEFAULTS)
 
 # 跳跃触发状态（面板线程写、仿真线程读；同样只靠 GIL 下单个 dict 项的原子读写）
-#   arm_once：空格/跳跃按钮按一次＝装填一次跳；auto：按住 P 打开"每 1.2 s 自动再装填"的连跳
+# arm_once：空格/跳跃按钮按一次＝装填一次跳；auto：按住 P 打开"每 1.2 s 自动再装填"的连跳
 jump_flags = {'arm_once': False, 'auto': False}
 
 # 模式切换的共享状态（面板线程写、仿真线程读）：
-#   mode    —— 当前模式（面板显示用）
-#   request —— 面板按下的切换请求（'toggle'），仿真线程消费后清 None
-#   reset   —— 面板请求复位（R / 复位按钮），仿真线程消费后清 False
+# mode    —— 当前模式（面板显示用）
+# request —— 面板按下的切换请求（'toggle'），仿真线程消费后清 None
+# reset   —— 面板请求复位（R / 复位按钮），仿真线程消费后清 False
 mode_shared = {'mode': MODE_FOURW, 'request': None, 'reset': False}
 
 # 主循环每步整体替换、面板线程只读 ⇒ 两边不共享同一个可变对象，不需要加锁
@@ -191,7 +191,7 @@ DBG_SEG_W = max(dwidth(_dbg_seg_yaw({'yaw_raw': 0.0, 'yaw_tgt': 0.0, 'yaw_cap': 
 
 
 def fmt_in(ch, v):
-    """指令列的显示格式。默认五路统一 m/rad + 两位小数（作者要求同口径），跳跃那路也不例外；
+    """指令列的显示格式。默认五路统一 m/rad + 两位小数，跳跃那路也不例外；
     高度那路用 fmt='+.3f'（0.005 步进需要三位才不丢精度、也避免 0.175 被显示成 0.17）。"""
     return f"{v:{ch.get('fmt', '+.2f')}}"
 
@@ -235,8 +235,8 @@ def load_actor_critic(path, obs_dim, device):
 
 
 # 回填白名单：地形几何不从历史 config 回填。
-#   --from_run_config 指向平地年代的 run 时，其 terrain.mesh_type = "plane"、
-#   height_field_file = None 等会把当前任务的地形图静默覆盖成平地。地形属于当前任务，不属于历史 run。
+# --from_run_config 指向平地年代的 run 时，其 terrain.mesh_type = "plane"、
+# height_field_file = None 等会把当前任务的地形图静默覆盖成平地。地形属于当前任务，不属于历史 run。
 _TERRAIN_GEOM_KEYS = (
     "mesh_type", "height_field_file", "num_rows", "num_cols", "terrain_length",
     "terrain_width", "horizontal_scale", "vertical_scale", "border_size",
@@ -551,7 +551,7 @@ def _build_single(args):
     env_cfg.env.num_envs = 3
     env_cfg.env.episode_length_s = 3600
     # 只有平地任务才缩小地形网格。wbr_terrain 的高度图是 4 行 × 6 列，
-    #   强行改成 2×2 会让 Terrain._load_height_field 的尺寸校验报错，也看不到完整地形。
+    # 强行改成 2×2 会让 Terrain._load_height_field 的尺寸校验报错，也看不到完整地形。
     if getattr(env_cfg.terrain, "height_field_file", None) is None:
         env_cfg.terrain.num_rows = 2
         env_cfg.terrain.num_cols = 2
@@ -623,8 +623,8 @@ def run_single(args):
         f"wheel_idx={','.join(str(i) for i in sorted(wheel_set))}",
         f"torque_limits={','.join(f'{v:.4f}' for v in torque_limits)}",
         f"dt={dt:.6f}",
-        # 【P7F4】model_file_path/load_num_steps 属性在 rsl_rl 1.0.2 不存在（恒写 "?"），
-        #   绘图页因此解析不出模型——改用真实来源：load_run 目录 + runner 已加载的迭代号。
+        # model_file_path/load_num_steps 属性在 rsl_rl 1.0.2 不存在（恒写 "?"），
+        # 绘图页因此解析不出模型——改用真实来源：load_run 目录 + runner 已加载的迭代号。
         "model_dir=" + str(args.load_run if (getattr(args, "load_run", None) and os.path.isdir(str(args.load_run))) else "?"),
         "model_iter=" + str(getattr(ppo_runner, "current_learning_iteration", None) or getattr(args, "checkpoint", "?")),
         "model_cli=" + "%s|%s" % (getattr(args, "load_run", "?"), getattr(args, "checkpoint", "?")),
@@ -858,7 +858,7 @@ def run_switch(args):
     seg_steps = int(round(SEGMENT_SECONDS / dt))
 
     # 两轮站立/行走用 W3 平衡网：动作 W3 序→wbr4 序重排；观测用 env._build_w3_obs()；
-    #   两轮模式下把 default_dof_pos 切成 W3 的 2W 站姿（W3 的 dof_err/PD 都相对它）。
+    # 两轮模式下把 default_dof_pos 切成 W3 的 2W 站姿（W3 的 dof_err/PD 都相对它）。
     W3_ACT_PERM = [0, 1, 3, 4, 2, 5]
     _dflt_4w = env.default_dof_pos.clone()
     _dflt_2w = _dflt_4w.clone()
@@ -1021,7 +1021,7 @@ def run_switch(args):
 
             elif mode == MODE_RISING:
                 # 起立（方案②）：P7S 完整相位机起立（HOLD4W→RISE→HANDOVER→HOLD2W），到交接点切 W3 对称站定。
-                #   P7S 负责抬起并站到两轮，W3 负责对称站定/平衡（之后 vx/yaw 可走）。
+                # P7S 负责抬起并站到两轮，W3 负责对称站定/平衡（之后 vx/yaw 可走）。
                 in_vx = in_yaw = 0.0
                 in_h = 0.19
                 env.command_targets[:, 0] = 0.0

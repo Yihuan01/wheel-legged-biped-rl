@@ -4,7 +4,7 @@
 # File      : run_policy.py
 # Purpose   : MuJoCo 四轮批量运行 CLI 壳：固定指令跑 SimLoop，出摘要/遥测/四联图数据。
 #             运行核在 sim_loop.py（与控制台 serve.py 共用一核）；本文件只做参数解析
-#             与产物落盘。物理语义与旧版逐位一致（slew 关闭，golden 对账把关）。
+#             与产物落盘。物理语义与 sim_loop 逐位一致（slew 关闭，golden 对账把关）。
 #             用法：python -m legged_gym.scripts.sim2sim_mujoco.run_policy --vx 0.3 --h 0.21 --dur 10
 # ==============================================================================
 
@@ -37,7 +37,7 @@ def main():
     contract = load_contract(a.contract)
     ckpt = resolve_model(contract, a.release)
     loop = SimLoop(a.mjcf, contract, ckpt=ckpt if a.mode == "policy" else None, mode=a.mode)
-    loop.slew = False                   # 批量模式：指令一步到位（保持旧版逐位行为，parity 把关）
+    loop.slew = False                   # 批量模式：指令一步到位（slew 关，parity 把关）
     loop.set_cmd("lin_vel_x", a.vx)
     loop.set_cmd("ang_vel_yaw", a.yaw)
     loop.set_cmd("base_height", a.h)

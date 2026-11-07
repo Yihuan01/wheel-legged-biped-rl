@@ -5,7 +5,7 @@
 # Purpose   : 组合地形生成器（纯 numpy，无 isaacgym 依赖）。
 #
 # 产出两套：
-#   1) wbr_p8_demo.npz —— **四象限演示场**（作者 2026-11-02 口径）
+#   1) wbr_p8_demo.npz —— **四象限演示场**
 #        13.5 m (x) × 7.0 m (y)，出生点在正中，四向各留 1 m 平地走廊。
 #          前·左 (+x,+y)：波浪 4 m | 平地 1 m | 随机起伏 4 m
 #          前·右 (+x,−y)：侧向斜坡 4 m | 平地 1 m | 单边减速带 4 m
@@ -43,7 +43,7 @@ Y_LEFT = +3.5          # 左区远端
 DEMO_LEN = X_FRONT - X_BACK      # 13.5 m
 DEMO_WID = Y_LEFT - Y_RIGHT      # 7.0 m
 CORRIDOR_W = X_COR_P - X_COR_N   # 1.0 m
-# 前区每区 2 个元素（作者 2026-11-02 二次要求：斜坡区与连续起伏区长度再翻倍）：
+# 前区每区 2 个元素（斜坡区与连续起伏区长度翻倍后的布局）：
 #   wave/slope 4 → 8 m，rand/speedbump 8 → 16 m
 FRONT_EL = 8.0
 FRONT_EL_LONG = 16.0
@@ -110,7 +110,7 @@ def build_demo(level="L3"):
             el_len = FRONT_EL_LONG if kind in ("rand", "speedbump") else FRONT_EL
             nx_r = _n(el_len)
             if kind == "slope":
-                # 前右区（作者 2026-11-02：**左低右高**）：y=−0.5（靠中央走廊）低、
+                # 前右区（**左低右高**）：y=−0.5（靠中央走廊）低、
                 #   y=−3.5（外侧）高 ⇒ 区域数组 col0 是高侧 ⇒ low_at=+1
                 kw = dict(low_at=+1, plat=SLOPE_PLATFORM,
                           deg=float(p.get("slope_deg", SLOPE_DEG)),

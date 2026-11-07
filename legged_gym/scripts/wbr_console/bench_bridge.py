@@ -3,10 +3,9 @@
 # Author    : SYH
 # File      : bench_bridge.py
 # Purpose   : Isaac 仿真进程内的 HTTP 控制口：读写 gui_cmds / mode_shared / jump_flags /
-#             readout，把控制台的指令送进正在跑的仿真。HTTP 管道用共享骨架
-#             bridge_common.py（与 MuJoCo 的 mj_bridge 同一份协议实现）；本文件只保留
-#             play02 专属的状态组装与动作语义。协议与 2026-11-05 前逐字一致，仅新增
-#             /api/state.engine="isaac"（【Sim2Sim P1】）。
+# readout，把控制台的指令送进正在跑的仿真。HTTP 管道用共享骨架
+# bridge_common.py（与 MuJoCo 的 mj_bridge 同一份协议实现）；本文件只保留
+# play02 专属的状态组装与动作语义；/api/state 额外回报 engine="isaac"。
 # ==============================================================================
 
 import os
@@ -20,7 +19,7 @@ _STATE = {
     "ranges": None,
     "env": None,
     "engine": "isaac",   # 【Sim2Sim P1】引擎身份；前端对缺字段默认按 isaac（向后兼容）
-    "camera": False,   # 相机跟随（默认关闭，前端可手动开关）——窗口对齐另按作者口径处理，非本项
+    "camera": False,   # 相机跟随（默认关闭，前端可手动开关）——窗口对齐另按停靠配置处理，非本项
     "started": time.time(),
     "telemetry": {"file": "—", "sizeMB": 0.0, "rows": 0},
 }
@@ -37,11 +36,15 @@ _CMD_KEYS = ("lin_vel_x", "ang_vel_yaw", "base_height", "ang_roll", "jump_height
 
 
 def _latest_telemetry():
-    """找 wbr_play_data 下最新的 wbr_*_tel_*.tsv，带缓存地数行数（≤2s 一次）。"""
+    """找 wbr_play_data 下最新的遥测 TSV，带缓存地数行数（≤2s 一次）。
+    过滤按 "是 .tsv 且前缀在已知集内"，不能按 "_tel_" 子串（新前缀
+    Isaac_1_/Isaac_2_/MJ_ 不含它）⇒ 否则新日志永远报不出来，chain_check 读错。"""
     from deps import play02_core as play02
     d = play02.DATA_DIR
+    _PREFIX = ("Isaac_1_", "Isaac_2_", "MJ_", "wbr_tel_", "wbr_switch_tel_")
     try:
-        names = [n for n in os.listdir(d) if n.endswith(".tsv") and "_tel_" in n]
+        names = [n for n in os.listdir(d)
+                 if n.endswith(".tsv") and n.startswith(_PREFIX)]
     except OSError:
         return _STATE["telemetry"]
     if not names:
@@ -75,7 +78,7 @@ def _cmd_ranges():
     vx/yaw/jump 用面板播放量程（_STATE['ranges']，启动时给；single 档为 None）；
     base_height / ang_roll 用 env 当前的 command_ranges（随模式切换动态：四轮 h[0.175,0.245]、roll 固定；
     两轮 h[0.2,0.35]、roll ±0.2；起立/趴下 h 固定）。量程退化(min==max)⇒前端把该滑块置灰。
-    【P7F4】single 档 ranges=None ⇒ 上面两项 vx/yaw 缺失：从 env.cfg.commands.ranges（所加载模型的
+    single 档 ranges=None ⇒ 上面两项 vx/yaw 缺失：从 env.cfg.commands.ranges（所加载模型的
     训练量程）补齐——否则浏览器滑条永远停在缺省 ±1.0，提速线 ±1.5 滑不出来。"""
     env = _STATE.get("env")
     out = {k: list(v) for k, v in (_STATE.get("ranges") or {}).items()}
@@ -135,7 +138,7 @@ def _build_state():
     return state
 
 
-# ------------------------------------------------------------------ 路由（语义与 2026-11-05 前逐字一致）
+# ------------------------------------------------------------------ 路由
 def _r_ping(body):
     return {"ok": True, "bridge": True}
 
@@ -238,7 +241,7 @@ def _install_camera_follow(env):
         _orig_step = env.step
         _last = [0.0]                   # 上次相机更新时刻（monotonic 秒）
         # 状态刷新 120 Hz（每步都更，控制 1/120 s 节流，
-        #   连续指令下发时的相机滞后感明显减小；开销可忽略——只是 set_camera 两个三元组）
+        # 连续指令下发时的相机滞后感明显减小；开销可忽略——只是 set_camera 两个三元组）
         _interval = 1.0 / 120.0
 
         def _step(actions):

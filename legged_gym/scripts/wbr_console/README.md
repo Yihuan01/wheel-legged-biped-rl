@@ -5,7 +5,7 @@ WBR 综合试验台的本地网页控制台。**P2/P3/P4 已完成**（启动与
 不再依赖 `scripts/play02.py` / `scripts/plot02.py`（两份原文件保持一行不改；2026-10-26 已裁「保留不删」）。
 
 **MuJoCo 引擎（Sim2Sim）已接入（2026-11-05，P1~P3）**：运行页左上角分段控件 `[Isaac Gym │ MuJoCo]`
-选引擎，同一运行页驱动；MuJoCo 配置是主导航里的**「MuJoCo 配置」页签**（与快启卡共用同一份设置）。详见下文「MuJoCo 引擎」一节。
+选引擎，同一运行页驱动；配置 MJ 是主导航里的**「配置MJ」页签**（与快启卡共用同一份设置）。详见下文「MuJoCo 引擎」一节。
 
 > **独立化方式**：`deps/play02_core.py` 与 `deps/plot02_core.py` 是 `scripts/play02.py`、`scripts/plot02.py`
 > 的逐字副本（函数体未动），差异只有 `DATA_DIR` / `REPO_ROOT` 改为按 `__file__` 推导、顶部加了出处说明。
@@ -15,7 +15,7 @@ WBR 综合试验台的本地网页控制台。**P2/P3/P4 已完成**（启动与
 
 ```
 wbr_console/
-├── app.html / app.css / app.js   前端（5 页签：运行/模型/MuJoCo 配置/绘图/说明；后端不可达时自动退回 mock 离线预览）
+├── app.html / app.css / app.js   前端（5 页签：运行/配置Isaac/配置MJ/绘图/说明；后端不可达时自动退回 mock 离线预览）
 ├── wbr_bench.py        后端：静态站点 + 试验台 API + 控制桥代理（纯标准库；ENGINES 表分引擎）
 ├── wbr_bench_run.py    Isaac 仿真进程入口：from deps import play02_core as play02，
 │                       替换 start_gui_thread / _build_switch 后跑 play02.play02(args)
@@ -74,32 +74,34 @@ wbr_bench.py（试验台服务，纯标准库；ENGINES 表按 spec.engine 分�
 独立化后 `bench_bridge` 也改为 `from deps import play02_core`，保证桥读写的是**同一个**模块对象
 （若仍 `import play02` 会绑到 scripts/ 原文件，共享字典断线——独立化时排掉的雷）。
 
-## 起立方案：P7T 传统起立（脚本链）与 P7S 快速起立（学习策略）
+## 起立方案：P7T2 相位脚本（默认）/ P7T 恒力矩（回退）/ P7S 学习策略
 
-`MODE_TRAD_RISE` 已落进 `deps/play02_core.py`（副本，原 play02.py 不动），配方逐条对齐
-2026-10-25 harness 验证（`/tmp/chain.py`，num_envs=1/3/6 全过）：
+`MODE_TRAD_RISE` 已落进 `deps/play02_core.py`（副本，原 play02.py 不动）。
 
-**链路**：4W 静稳 0.6s → smoothstep 折蹲 0.5s（hip ±1.5391 / knee ∓2.2722）→ 蹲稳 0.4s
-→ smoothstep 伸腿到 2W 0.5s（腿 P ×`trad_boost`，轮零矩）→ 恒力矩 C=`trad_torque` 抬升
-（门限 p_g>−0.26 rad 且 z>0.20，实测 ~0.2s）→ 交 W3（hcmd=`trad_hcmd` 0.22 保持 `trad_hcmd_hold` 3s 后回常规 0.28）。
-harness 三处修复一并落地：交 W3 前恢复原 `_compute_torques`、`env.commands=command_targets` + 刷观测、
-进入时 `_dr_act_delay/_dr_obs_delay` 清零。**复位键随时可中断**（自动卸力矩补丁、恢复名义腿增益）。
+**P7T2 链路（2026-11-07 定版，`standup_mode=script` 或 MuJoCo 五槽链）**：
+4W 静稳 `t_trad_hold` → smoothstep 折蹲 `t_trad_crouch`（hip ±1.5391 / knee ∓2.2722）→
+蹲稳 `t_trad_crouch_hold` → smoothstep 伸腿 `t_trad_extend` 到 **W3 稳态腿姿 (1.415, −2.113)** →
+抬升。**轮矩律从折蹲第一拍就生效**：`u = −(kp·pitch + kd·rate) + kv·vx`
+（pitch 正=后仰、u<0=机体前翻；缺省 kp 12 / kd 3 / kv 14，MuJoCo 侧钳位 kp∈[8,16] kd∈[4,6] kv∈[4,10]
+并另加 `u_bias` 折蹲前馈）。**交棒＝三闸驻留**：|pitch| ≤5.7° ∧ |rate| ≤0.5 ∧ |vx| ≤`trad_vx_tol` 连续 0.1 s，
+保险丝 `t_trad_lift_max` 兜底。
+（旧版 `grav_k·|sin(pitch)|+grav_c` 恒正＝前驱，实测只前移不翻身；`const` 剖面＝旧恒力矩 C 保留为回退。）
 
-**场景接入（纯参数，不改代码）**：场景 `params` 里 `standup_mode: "trad"` + 上述 `t_trad_*/trad_*`
-（缺省值＝harness 验证值，全部可省略）；**没有 `standup_mode` 时走 P7S 学习策略，行为不变**。
+**场景接入**：`standup_mode` 三选一 —— `p7s`（学习策略）/ `trad`（P7T 恒力矩）/ `script`（P7T2，默认场景用它）；
+`P7T2_五槽链_P8` 即 script 档。参数见模型配置页「② 起立 · 相位脚本 (P7T2)」组。
 
-| 场景 | params | 实测（2026-10-26） |
+| 场景 | params | 实测 |
 |---|---|---|
-| `P7T_传统起立` | `standup_mode=trad` + trad 参数 | 4W→TWOW **3.57s**（含静稳/折蹲全程；交 W3 时 p_g −14.8°、z 0.260，与 harness 一致）；趴下 2.64s；连续两轮循环 ✅ |
-| `P7S_快速起立` | `t_rise=0.2`、`t_handover=0.05`、`leg_p_gains=2.0` | 4W→TWOW **1.06~1.08s**（默认参数基线 2.54s）；趴下 2.66~2.85s |
+| `P7T2_五槽链_P8` | `standup_mode=script` + 上表参数 | Isaac：起立 2.8~3.2 s、净位移 −0.24 m、交棒后两轮 z 0.28 稳站；MuJoCo：起立 2.85 s（C1×3 全过） |
+| `P7T_脚本起立R81` | `standup_mode=script`（R81 作两轮槽） | 对照验收用（两轮为 R81，不是 P8W7） |
+| P7S 档 | `t_rise=0.2`、`t_handover=0.05`、`leg_p_gains=2.0` | 4W→TWOW 1.06~1.08 s（默认参数基线 2.54 s） |
 
-> `leg_p_gains`（P7S 代理用）＝`env.p_gains[腿]` 在 SP_RISE/SP_HANDOVER 相位 ×倍率，其余相位恢复名义值
-> （`wbr_bench_run.py` 包装 `env.playback_set_mode` 实现，只动运行时张量）。
-> 已知未测边界：交 W3 满 3s 时 hcmd 0.22→0.28 的切换未单独验证（实测两次从 0.22 窗口出来后
-> z 0.24→0.30 平滑站高，无异常）；人工复验起立过程时留意此处。
+> `leg_p_gains`（P7S 代理用）＝`env.p_gains[腿]` 在 SP_RISE/SP_HANDOVER 相位 ×倍率，其余相位恢复名义值。
+> **起立必然有位移**：滚轮要把从动轮抬过支撑，Isaac 实测 −0.24 m、MuJoCo −0.34 m（含折蹲前馈）；
+> 这是物理代价，不是缺陷。
 
 **前端参数卡（2026-10-26 补全，两处 UI 缺陷修复）**：模型配置页「衔接参数」卡含**起立方案下拉**
-（P7S 学习策略 / P7T 传统脚本链）与全部 `trad_*`/`leg_p_gains` 字段（trad 组在 P7S 下灰显）。
+（P7S 学习策略 / P7T 恒力矩 / P7T2 相位脚本）与全部 `trad_*`/`leg_p_gains` 字段（trad 组在 P7S 下灰显，script 与 trad 共用该组）。
 此前 `buildSpec` 只认老 9 键，UI 启动会把 `standup_mode`/trad 参数/`leg_p_gains` 全丢掉——**两个场景
 都跑成默认 P7S**（「两个场景一样」的根因之一）；另外刷新页面时活动场景只换 pill 文字、参数回落
 settings 旧值（根因之二），均已修复并走全 UI 链路复验（见实测记录）。
@@ -109,7 +111,7 @@ settings 旧值（根因之二），均已修复并走全 UI 链路复验（见�
 | 页签 | 内容 |
 |---|---|
 | **仿真运行** | 上方仿真视口（填充剩余高度，P3 停靠原生窗口；工具条含**相机跟随开关**，默认关）；下方控制台（5 路滑块 **Vx / Yaw / Height / Roll / Jump**（首字母大写）+ in/tgt/act 三联读数、**每路滑块两侧显示当前加载模型的实际指令量程（黑色）**，四轮 h[0.175,0.245]/roll 固定、两轮 h[0.2,0.35]/roll±0.2，量程退化的通道**整卡置灰**；起立/趴下/复位/装填跳、连跳、收藏当前、状态条）；底部抽屉（运行记录 / 控制台输出 / 复现命令）。**键盘**：W/S 前后、A/D 偏航、**I/K 体高 +/−**、J/L 侧倾、**H 装填跳、空格 指令重置到当前模式默认位**、M 切模式、R 复位、1/2/3/4 切页签（输入框内不触发，数字键按导航顺序） |
-| **数据绘图** | 真实遥测看图（复用 plot02_core）：时间窗 + body_z 缩略轴（可拖）+ 子图网格；单策略 18 图、双模式 9 图（模式色带，传统起立与起立中同色）；顶部「模型配置」胶囊显示这份录像用的权重（双模式列出四轮/起立/两轮/趴下四个模型，传统起立标「P7T 传统脚本链」）；支持整页/分图导出、自动跟随 |
+| **数据绘图** | 真实遥测看图（复用 plot02_core）：时间窗 + body_z 缩略轴（可拖）+ 子图网格；单策略 18 图、双模式 9 图（模式色带，传统起立与起立中同色）；顶部「模型配置」胶囊显示这份录像用的权重（双模式列出四轮/起立/两轮/趴下四个模型，相位脚本起立标「P7T2 相位脚本（无权重）」）；支持整页/分图导出、自动跟随 |
 | **模型配置** | 左右分区：**左侧**「启动预检」+「场景管理 / 检查点库」；**右侧**「模型配置」——双模式、单策略上下两张卡，双模式卡内含**可编辑的衔接参数**（起立方案、相位时长、P7S/trad 参数）。场景/固化存档条目**双击即加载**（场景→套用；存档→加载到单策略）；每条最右两个图标：**笔**（悬停「覆写到本条」）弹保存窗口、命名确认后用当前右侧内容覆写该条，**垃圾桶**（悬停「删除本条」）弹确认后删除。单策略区有「固化检查点」按钮（命名后把当前 checkpoint 存入检查点库） |
 | **使用说明** | 参数说明 / 功能说明 / 快捷键说明 / 存储路径说明（四个区域标题行浅蓝底，无编号；取代原「?」帮助弹窗） |
 
@@ -122,6 +124,48 @@ settings 旧值（根因之二），均已修复并走全 UI 链路复验（见�
 >
 > 【2026-10-26】原 `t_hold4w / t_hold2w / blend` 与「循环 / 自动演示」开关**后端并不消费**，已从参数卡移除
 > （真正连跳走 `jump_flags`）；现参数卡＝起立方案 + 6 个相位时长 + `leg_p_gains`(P7S) + 9 个 trad 参数。
+
+## 日志命名规则（2026-11-07 作者定）
+
+| 前缀 | 引擎/模式 | 产出 |
+|---|---|---|
+| `Isaac_1_<时间戳>.tsv` | Isaac 单策略 | play02 single 档 |
+| `Isaac_2_<时间戳>.tsv` | Isaac 双模式 | play02 uni/switch 档 |
+| `MJ_<时间戳>.tsv` | MuJoCo | serve.MjTelWriter |
+
+旧前缀 `wbr_tel_*` / `wbr_switch_tel_*` 在绘图页**兼容显示**（PATTERNS 新旧并存），
+仅新日志按此命名。MuJoCo 日志含**全部 8 dof × 6 关节列**（pos/vel/tau × tgt/act，
+含 caster —— 不能只写 action_dof_names 的 6 个：`left_knee_caster_joint` 名含 "knee"，
+plot02 会为它建"左膝 速度/扭矩"面板，缺列就显示"无该列数据"）与
+`#joints/#leg_idx/#torque_limits` 元数据 ⇒ 两引擎绘图页完全同构。
+
+## 前端设计规则（2026-11-07 作者定，硬规则）
+
+以下为控制台前端的**统一契约**，改 `app.css` / `app.js` 时必须同时满足；实现集中在 `app.css` 末尾
+「卡片统一」块与 `app.js` 的 `renderPreflight()`，不要在各页单独写覆盖样式。
+
+1. **三个内容页（配置Isaac / 配置MJ / 使用说明）的卡片样式完全一致**：
+   - 标题栏高度 **2rem（32px @16px 根字号）**、字号 **.82rem**、字体 `var(--font-sans)`、字重 600、
+     primary 10% 底 + 1px 下边框、内边距 `.3rem .6rem`；
+   - 同一条选择器覆盖所有标题栏：`.pf-wide > h4`、`.mj-box > h4`、`.model-side .box > h4`、
+     `.usegrid .box > h4`、`.cfg-head`（双模式/单策略卡的标题栏）；
+   - `.cfg-head` 里的图标/胶囊/按钮不得撑高标题栏（固定 `height:2rem` + `overflow:hidden`）；
+   - 「当前使用」态只把底色加深到 primary 16%，不改高度/字号。
+   - 校验：三页任一 `> h4` 与 `.cfg-head` 的 computed `height / fontSize / fontFamily / fontWeight` 相同。
+
+2. **两个配置页「启动预检」卡片位置、大小、格式一致**：
+   - 卡片全宽、位于页首（两页 `pagehead` 都限制 `min-height:2rem` + 长描述单行省略，保证 y 对齐）；
+   - 正文区固定 **3 列 × 4 行 = 12 格**：`grid-template-columns: repeat(3,1fr)`、
+     `grid-template-rows: repeat(4,1.5rem)`（+ `grid-auto-rows` 同高兜底）、字号 `.7rem`；
+   - 两页共用 `renderPreflight(items, boxId)`，恒输出至少 12 个 `<span>`：不足补透明空格
+     （`.pf-blank`）；**不截断、不隐藏任何检查项**（MuJoCo 最后一条也必须显示），
+     超过 12 项时网格自动加行、两页规则仍一致；
+   - 正文区 `.bd` 一律 `display:block`（MuJoCo 的 `.mj-box > .bd` 是 flex，需显式覆盖）。
+   - 校验（1920×1080 CDP 实测）：两页预检卡 `x / y / w / h` 与检查网格 `cols / rows / fontSize / 格数` 全部相同。
+
+3. **布局补充**：双模式/单策略卡片按 3:1 分配右侧剩余高度、内部放大字号；常见分辨率（≥1600 宽）
+   下双模式内容完整显示且**无滚动条**（卡片内允许略微留空），更小视口才由 `overflow-y:auto` 兜底；
+   侧栏「场景与运行 / 检查点库」撑满剩余高度、条数增多时列表内滚动（卡片高度不变）。
 
 ## 原生窗口停靠（P3）
 
@@ -148,8 +192,10 @@ settings 旧值（根因之二），均已修复并走全 UI 链路复验（见�
 
 - 数据层 `bench_plot.py` 用 `deps/plot02_core.py`：复用 `Index`（行索引/增量扫描）、
   `read_overview`（缩略轴包络）、`read_window`（单策略时间窗切片）、`KIND`（曲线分类配色）。
-- 四槽日志（`wbr_switch_tel_*.tsv`）没有关节列 ⇒ 另给一套 9 图面板（3 组 × 3 图）：
-  线速度/偏航/高度跟随、机身高度/俯仰/模式色带+相位、触地轮数/从动轮离地/起立锁存，共 18 条曲线。
+- 【2026-11-07 更新】旧版四槽日志（`wbr_switch_tel_*.tsv`）没有关节列 ⇒ 曾另给一套
+  9 图面板；**新日志（`Isaac_2_*` / `MJ_*`）都带全部关节列**，单策略/双模式/MuJoCo
+  三类统一走 `plot02.build_panel_cols` 的 19 图面板（两引擎同构）；旧四槽日志缺列时
+  `read_window` 只画有数据的系列，缺的面板留空（向后兼容）。
 - 遥测文件仍落在 `scripts/wbr_play_data/`（`play02_core.DATA_DIR` 绝对路径指定）。
 
 ## 接口一览
@@ -173,7 +219,7 @@ settings 旧值（根因之二），均已修复并走全 UI 链路复验（见�
 | POST | `/api/cmd` `{key,value}` | 下发指令（代理到桥） |
 | POST | `/api/action` `{action,value}` | toggle/rise/lower/reset/armjump/auto |
 | POST/DELETE | `/api/scenarios` `/api/saved` | 保存/删除场景、固化/删除存档 |
-| GET | `/api/mujoco/manifest` | MuJoCo 配置页清单：MJCF+sha / S0 parity 读数 / 契约要点 |
+| GET | `/api/mujoco/manifest` | 配置MJ 页清单：MJCF+sha / S0 parity 读数 / 契约要点 |
 | POST | `/api/mujoco/export` | 用 mujoco env 跑 `eval/plot_run.py --latest` 出三联图 PNG |
 
 ## MuJoCo 引擎（Sim2Sim，P1~P3 已实施 2026-11-05）
@@ -183,7 +229,7 @@ settings 旧值（根因之二），均已修复并走全 UI 链路复验（见�
 
 - **引擎选择**：运行页左上角分段控件 `[Isaac Gym │ MuJoCo]`，只切启动面板；运行中按钮锁定；
   停止后解锁。引擎徽标 `● ENGINE: …` 取自桥 `/api/state.engine`（Isaac 橙 / MuJoCo 青，未启动灰）。
-- **配置入口**：主导航**「MuJoCo 配置」页签**（**四轮/两轮模式选择** / 模型按维度过滤 / MJCF+sha / 场景预设 / 时长·倍速·录制·窗口 / 预检 / S0 parity 对账 / 导出图；持久化 localStorage `wbr.mj.cfg`）。原运行页快启卡已按作者要求移除，配置页签是唯一入口。
+- **配置入口**：主导航**「配置MJ」页签**（**四轮/两轮模式选择** / 模型按维度过滤 / MJCF+sha / 场景预设 / 时长·倍速·录制·窗口 / 预检 / S0 parity 对账 / 导出图；持久化 localStorage `wbr.mj.cfg`）。原运行页快启卡已按作者要求移除，配置页签是唯一入口。
 - **引擎差异收敛在 `ENGINES` 表**（wbr_bench.py）：解释器（`WBR_PYTHON` / `WBR_PY_MUJOCO`，缺省
   `~/miniconda3/envs/mujoco/bin/python`）、启动 argv（脚本 / `-m serve`）、LD_LIBRARY_PATH、
   训练拦截（Isaac 拦、MuJoCo 放行——纯 CPU 可与训练并行）、preflight 分支。
@@ -199,8 +245,8 @@ settings 旧值（根因之二），均已修复并走全 UI 链路复验（见�
   可用控制项（跳跃槽解锁「装填跳」，roll 只在两轮槽可用）。链模式 `spec.wmode="uni"`：`serve.py` 建
   `deploy/uni_chain.py` 的 `UniChain`，桥 `/api/state` 增 `chain/slot/phase/marks/canJump`，运行页控制台下方出
   **链时序条**（每槽事件：时间/z/终止原因）；链预检 `_preflight_mujoco_chain()` 逐份核对四槽权重维度与 MJCF sha。
-  **两轮起步链已验证 9.6 s 零终止；四轮起步链的 P7T 起立在 MuJoCo 未收口**（预检给 warn）。
-- **复杂地形（demo，2026-11-06）**：MuJoCo 配置页选「⛓ 五槽链」后多出「复杂地形（demo）」勾选，
+  **两轮/四轮起步链均已验证**（四轮起步 = 4W→RISE 真起立→IDLE2W，2026-11-07 起预检不再给 warn）。
+- **复杂地形（demo，2026-11-06）**：配置MJ 页选「⛓ 五槽链」后多出「复杂地形（demo）」勾选，
   `spec.terrain` → `UniChain(terrain=True)` → `wbr_v2_demo.xml`（`wbr_p8_demo.npz` 四象限：波浪/斜坡/
   减速带/台阶/断开平台，中央十字走廊平地，地面浅色）。出生点＝中央十字走廊交点、初速 0、
   roll ±0.2、height 0.20~0.35、跳跃高度 0.05~0.15 均可调（跳跃高度在**行走时**预设，装填跳时才下发；
@@ -214,7 +260,8 @@ settings 旧值（根因之二），均已修复并走全 UI 链路复验（见�
   `起立/趴下/装填跳/回两轮/回四轮/复位/切槽` 按守卫表动态解禁并真正下发；
   运行页出指令回执条（接受/拒绝＋原因、可下指令清单、事件时序）。过渡请求先过**站定门**
   （|vx|≤0.08 且 |pitch|≤5.7° 连续 8 拍，超时 1.5 s），避免任意时刻立刻切网导致策略吃分布外输入翻倒。
-  起立按钮在 MuJoCo 未收口 ⇒ 明确拒绝并回显原因，不阻塞其它槽。CLI 自动播放保持原行为、产物可复现。
+  ［2026-11-07 更新］起立在 MuJoCo 已收口（4W→RISE 真起立 2.85 s，C1×3 全过），不再拒绝；
+  只有显式选 `standup_engine="p7t"`（旧恒力矩剖面）时守卫才回绝并回显原因。CLI 自动播放保持原行为、产物可复现。
 
 - **停止/响应优化（2026-11-06）**：MuJoCo 侧 stop 走桥的 `loop.stop_requested` 确定性通道
   （主循环下一拍退出并 flush），不再单靠 SIGINT；实测 **21 s → 0.2 s**。`serve.py` 入口限
@@ -234,7 +281,7 @@ settings 旧值（根因之二），均已修复并走全 UI 链路复验（见�
   守卫 + 一个键盘守卫（M/H/U/O/J/L），CSS `body.engine-mujoco` 统一置灰外观；置灰不隐藏。
   滑块量程走既有 cmdRanges 动态机制（Height 自动收窄 0.175–0.245，Roll/Jump 量程退化自动置灰）。
 - **已知限制**：① 桥的 400（如 jump_height）经后端代理表现为 `bridgeDown`——前端置灰挡住不会发；
-  ② 录制行在内存累积，超长会话（小时级）注意内存；③ ~~MuJoCo 遥测列名与 play02 不同，绘图页不接~~ → **2026-11-06 已接**：serve 落 `wbr_tel_mj_*.tsv`（plot02 口径），绘图页两引擎通用；Isaac 关节面板缺列留空。
+  ② 录制行在内存累积，超长会话（小时级）注意内存；③ ~~MuJoCo 遥测列名与 play02 不同，绘图页不接~~ → **2026-11-06 已接**：serve 落 `MJ_*.tsv`（plot02 口径、含关节列），绘图页两引擎**完全同构**（含关节面板）。
 
 ### 实测（2026-11-05，P1~P3 验收）
 

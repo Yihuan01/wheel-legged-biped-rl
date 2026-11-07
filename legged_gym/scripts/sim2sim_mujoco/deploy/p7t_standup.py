@@ -49,7 +49,7 @@ class P7TStandup:
         self._c = 0.0
         self._off = 0.0
 
-    def step(self, z, body_pitch, vz=0.0, pitch_rate=0.0):
+    def step(self, z, body_pitch, vz=0.0, pitch_rate=0.0, roll=0.0, vx=0.0):
         """推进一拍（内部 t += dt）并返回当拍指令。"""
         p = self.p
         out = {"default_leg": DFLT_4W.copy(), "wheel_torque": None, "boost": 1.0,

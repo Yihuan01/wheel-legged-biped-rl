@@ -656,11 +656,10 @@ body.engine-mujoco [data-mj-locked]:not([disabled]):hover {
   display: flex; align-items: center; gap: .4rem;
 }
 .mj-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
-/* 【2026-11-06】页首全宽预检卡（Isaac/MuJoCo 两页同位同宽），预检项分两栏 */
+/* 【2026-11-06】页首全宽预检卡（Isaac/MuJoCo 两页同位同宽）。
+   具体布局（三列 / 8 行 / 内边距 / display:block）统一由文件末尾的「卡片风格统一」块定义，
+   此处只保留卡间距，避免两处 padding 规则互相覆盖。 */
 .pf-wide { margin-bottom: .6rem; }
-
-.pf-wide > .bd, .pf-wide > .checks { padding: .6rem .7rem; }
-.pf-wide .checks.two { grid-template-columns: 1fr 1fr; column-gap: 1.6rem; }
 .span2 { grid-column: 1 / -1; }
 @media (max-width: 900px) { .mj-grid { grid-template-columns: 1fr; } }
 
@@ -688,3 +687,221 @@ body.engine-mujoco [data-mj-locked]:not([disabled]):hover {
 }
 #mjChainBar[hidden] { display: none; }
 .kv b { color: var(--foreground); }
+
+/* ---------------------------------------------- IsaacGym 配置页布局（2026-11-07 定版）
+   目标：整个视口填满；预检卡固定 8 行（两页一致）；双模式/单策略卡片放大填满右侧；
+   侧栏两张卡按剩余高度均分、条数增多时列表内滚动。 */
+@media (min-width: 861px) { #page-model { overflow: hidden; } }
+/* 【2026-11-07】两配置页页首等高，让下方「启动预检」卡片的 y 位置完全一致。
+   MuJoCo 页说明文字较长，限制单行省略，避免换行把预检卡顶下去。 */
+#page-model .pagehead, #page-mujoco .pagehead {
+  margin: 0 0 .4rem; min-height: 2rem; flex-wrap: nowrap;
+}
+#page-mujoco .pagehead .muted {
+  flex: 1 1 auto; min-width: 0; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+#page-model .pagehead { margin: 0 0 .4rem; }
+/* 两栏重新拉伸到等高（填满整个高度）；侧栏均分、列表滚动 —— 与"消左下空白"不矛盾：
+   现在卡片是**主动撑满**，内部由列表滚动填充，不再是"只有 1~2 条却留一大片空框"。 */
+#page-model .model-layout { align-items: stretch; gap: .5rem; }
+#page-model .model-side .box.grow { flex: 1 1 0; min-height: 0; }
+#page-model .model-side .box.grow .list.scroll {
+  flex: 1 1 auto; min-height: 0; max-height: none;
+  overflow-y: auto; overflow-x: hidden;
+}
+/* 右侧两张 cfg-card 放大填满：双模式内容多给 3 份、单策略 1 份（3:1）。
+   双模式卡片内部元素**略微收小**，让内容在常见分辨率（≥1600 宽）下完整显示、
+   不用滚动条、卡片内可留空一两行；更小视口才由 overflow-y:auto 兜底。 */
+#page-model .model-main { gap: .5rem; min-height: 0; }
+#page-model .cfg-card { min-height: 0; }
+#page-model .cfg-card[data-mode="uni"] { flex: 3 1 0; }
+#page-model .cfg-card[data-mode="single"] { flex: 1 1 0; }
+#page-model .cfg-card .cfg-body { flex: 1 1 auto; overflow-y: auto; padding: .4rem .55rem; }
+#page-model .cfg-head b { font-size: .82rem; }
+#page-model .cfg-meta { font-size: .7rem; }
+#page-model .cfg-use { font-size: .76rem; padding: .22rem .6rem; }
+#page-model .cfg-ic { width: 1.6rem; height: 1.6rem; font-size: .95rem; }
+#page-model .detail-cap { margin-bottom: .35rem; font-size: .72rem; }
+#page-model .detail-sub { margin-top: .38rem; padding-top: .32rem; }
+#page-model .detail-sub h5 { margin-bottom: .28rem; font-size: .8rem; }
+#page-model .chain { gap: .3rem; margin: .05rem 0 .4rem; }
+#page-model .slot { padding: .35rem .45rem; }
+#page-model .slot .stage { font-size: .66rem; }
+#page-model .slot .model { font-size: .78rem; margin: .1rem 0 .02rem; }
+#page-model .slot .ckpt { font-size: .66rem; }
+#page-model .slot .badges { margin: .22rem 0 .28rem; gap: .2rem; }
+#page-model .slot .slotbtns { gap: .22rem; }
+#page-model .slot .slotbtns button { font-size: .68rem; padding: .16rem .4rem; }
+#page-model .arrow { font-size: 1rem; }
+#page-model .pgroup { margin-bottom: .35rem; padding: .3rem .45rem; }
+#page-model .pgroup-h { margin-bottom: .22rem; font-size: .74rem; }
+#page-model .pgroup-h .muted { font-size: .66rem; }
+#page-model .params { gap: .2rem .32rem; }
+#page-model .param.edit { padding: .12rem .38rem; font-size: .74rem; gap: .24rem; }
+#page-model .param.edit .pin { width: 3.5rem; padding: .1rem .28rem; font-size: .74rem; }
+#page-model .param.edit .u { font-size: .66rem; }
+#page-model #standupModeSel, #page-model .detail-sub h5 .pin.sel {
+  font-size: .78rem; padding: .18rem .4rem;
+}
+#page-model .cfg-card[data-mode="single"] .detail-cap { display: none; }
+#page-model .single-hint { display: none; }
+#page-model .single-form { gap: .4rem; }
+#page-model .single-form .input { padding: .16rem .38rem; font-size: .78rem; }
+#page-model .single-form .sf { font-size: .76rem; }
+#page-model .single-form .btn { font-size: .78rem; padding: .28rem .65rem; }
+
+/* 场景条目：P7T2 五槽链等长名字完整显示 —— 名称单独占一行、meta 再占一行，
+   操作按钮右上角；旧的 flex 单行 + nowrap/ellipsis 会把名字截断。 */
+.sc-item { flex-wrap: wrap; }
+.sc-item .nm {
+  flex: 1 1 auto; min-width: 0;
+  white-space: normal; overflow: visible; text-overflow: clip;
+  word-break: break-word; font-size: .76rem; line-height: 1.35;
+}
+.sc-item .acts { order: 1; }
+.sc-item .sc-meta {
+  order: 2; flex: 1 1 100%; white-space: normal; overflow: visible;
+  font-size: .68rem; line-height: 1.3; padding-top: .1rem;
+}
+/* 检查点库：内置关键检查点（编号 + 检查点号、只读、置顶）与用户固化存档 */
+.key-ckpt { background: color-mix(in srgb, var(--primary) 8%, var(--muted)); }
+.kc-no {
+  flex: 0 0 auto; font-size: .8rem; font-weight: 600;
+  color: var(--primary); min-width: 1.2rem; text-align: center;
+}
+.key-ckpt .nm { font-size: .72rem; }
+.key-ckpt .meta { font-size: .64rem; }
+.kc-fixed {
+  font-size: .62rem; padding: .1rem .35rem; border: 1px solid var(--border);
+  border-radius: 6px; color: var(--muted-foreground);
+}
+
+/* ============================================================================
+   【2026-11-07 前端设计规则 · 卡片统一】
+   规则 1：两个配置页 + 说明页的卡片样式一致 —— 标题栏高度 / 字号 / 字体完全相同。
+           统一落到一条选择器：.pf-wide/.mj-box/.model-side/.usegrid 的 > h4 与 .cfg-head。
+   规则 2：两个配置页「启动预检」卡片位置 / 大小 / 格式完全一致 —— 4 列 × 3 行 = 12 格，
+           固定行高、固定内边距、固定字号；两页共用 renderPreflight 输出恰好 12 个格。
+   规则置于文件末尾，覆盖 .box h4 / .cfg-head / .mj-box>.bd 等前序同特异性规则。
+   ============================================================================ */
+.pf-wide, .usegrid .box, .mj-box, .model-side .box { margin-bottom: 0; }
+.pf-wide { margin-bottom: .5rem; }
+
+/* —— 规则 1：标题栏统一（高度由统一 padding + line-height 决定，字号/字体一致） —— */
+.pf-wide > h4, .usegrid .box > h4, .mj-box > h4, .model-side .box > h4,
+.cfg-head {
+  margin: 0; font-size: .82rem; font-weight: 600;
+  font-family: var(--font-sans); line-height: 1.35;
+  padding: .3rem .6rem; height: 2rem; min-height: 2rem; box-sizing: border-box;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--primary) 10%, var(--card));
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: .4rem;
+}
+/* cfg-head 内部元素统一字号、不撑高标题栏 */
+.cfg-head b { font-size: .82rem; font-weight: 600; }
+.cfg-head .cfg-meta { font-size: .7rem; }
+.cfg-head .cfg-use { font-size: .76rem; padding: .2rem .55rem; }
+.cfg-head .cfg-ic { width: 1.3rem; height: 1.3rem; font-size: .82rem; flex: 0 0 auto; }
+.cfg-card[data-current="true"] .cfg-head { background: color-mix(in srgb, var(--primary) 16%, var(--card)); }
+
+/* —— 规则 2：预检卡两页同款：3 列 × 4 行固定 12 格 ——
+   不截断任何检查项（MuJoCo 最后一条也要显示）；不足补透明空格，超过 12 时
+   grid-auto-rows 自动加行、行高一致，卡片随内容增高但两页规则相同。 */
+.pf-wide > .bd, .pf-wide > .checks, .mj-box.pf-wide > .bd {
+  padding: .35rem .6rem; display: block;
+}
+.pf-wide .checks.two {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: repeat(4, 1.5rem);
+  grid-auto-rows: 1.5rem;
+  gap: 0 .7rem; font-size: .7rem; align-items: center;
+}
+.pf-wide .checks span { gap: .34rem; align-items: center; min-width: 0; }
+.pf-wide .checks b { flex: 0 0 auto; }
+.pf-wide .checks .pf-blank { opacity: 0; }
+
+/* ---------------------------------------------- MuJoCo 配置页排版（2026-11-07）
+   场景与运行卡分「指令/运行」两节；契约要点与 S0 对账改 <details> 折叠。 */
+.mj-sec {
+  font-size: .8rem; font-weight: 650; color: var(--foreground);
+  letter-spacing: .02em; margin: .55rem 0 .3rem;
+}
+.mj-box .bd .mj-sec:first-child { margin-top: 0; }
+.mj-details {
+  border: 1px solid var(--border); border-radius: 7px;
+  background: color-mix(in srgb, var(--muted) 45%, var(--card));
+  margin-top: .4rem;
+}
+.mj-details summary {
+  cursor: pointer; font-size: .72rem; color: var(--muted-foreground);
+  padding: .22rem .45rem; user-select: none; list-style: none;
+}
+.mj-details summary::-webkit-details-marker { display: none; }
+.mj-details summary::before { content: '▸ '; font-size: .66rem; }
+.mj-details[open] summary::before { content: '▾ '; }
+.mj-details > .bd, .mj-details > .kv { padding: .1rem .55rem .4rem; }
+/* 【2026-11-07】MJ 两卡字号与 Isaac 双模式卡（#page-model）统一并调大：
+   表单主体 .78rem（原 .7）、参数行/契约 .8rem、输入框同步；
+   两卡高度由内容自然增加（此前过矮、留白偏多）。 */
+#page-mujoco .mjf { font-size: .78rem; gap: .35rem; line-height: 1.45; }
+/* 【2026-11-07 作者定】字段小标题黑色加粗；与上方元素拉开间距 */
+#page-mujoco .mjf > span {
+  color: var(--foreground); font-weight: 650; font-size: .8rem;
+  margin-top: .3rem;
+}
+#page-mujoco .mj-row > .mjf:first-child > span { margin-top: .45rem; }
+/* 【2026-11-07 作者定】两卡所有下拉/输入框统一高度（1.9rem）并调高舒适度；
+   槽位选择卡同高（1.9rem 内框），六卡视觉一致 */
+#page-mujoco .mjf .input {
+  font-size: .78rem; padding: .3rem .45rem;
+  height: 1.9rem; box-sizing: border-box;
+}
+#page-mujoco .slotpick-item {
+  min-height: 4.75rem; height: 4.75rem; box-sizing: border-box;
+  padding: .35rem .5rem; align-items: center;
+}
+#page-mujoco .slotpick-item .sp-main { gap: .15rem; }
+#page-mujoco .slotpick-item .sp-ckpt { display: block; }   /* 两行布局恢复：名称 + 检查点号 */
+#page-mujoco .slotpick-item .badges { flex-direction: column; gap: .15rem; align-items: flex-end; }
+#page-mujoco .mj-row { gap: .9rem .7rem; }
+#page-mujoco .mj-box > .bd { padding: .55rem .65rem; display: block; gap: 0; }
+#page-mujoco .mj-sec { font-size: .76rem; margin: .5rem 0 .3rem; }
+#page-mujoco .mj-box .kv { font-size: .8rem; line-height: 1.7; }
+#page-mujoco .tgl { font-size: .78rem; }
+#page-mujoco .mj-details summary { font-size: .76rem; }
+#page-mujoco .mj-grid { align-items: stretch; }
+/* 【2026-11-07】mj-grid 撑满页面剩余高度（原 auto ⇒ 下方大片空白）；
+   两卡等高、内容顶部对齐（.bd 高度由内容决定，卡片底随网格拉伸）。 */
+#page-mujoco .page[data-page="mujoco"].on,
+#page-mujoco.on { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+#page-mujoco .mj-grid { flex: 1 1 auto; min-height: 0; }
+#page-mujoco .mj-grid > .box { display: flex; flex-direction: column; min-height: 0; }
+#page-mujoco .mj-grid > .box > h4 { flex: 0 0 auto; }
+#page-mujoco .mj-grid > .box > .bd { flex: 1 1 auto; }
+/* 【S0 对账卡已移除（作者定）】：#cfxParityBox 规则一并删除 */
+
+/* 【2026-11-07】MuJoCo 槽位选择区（select → 卡片选择区） */
+.slotpick { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .3rem; }
+.slotpick-item {
+  display: flex; align-items: center; gap: .35rem; min-width: 0;
+  font: inherit; text-align: left; cursor: pointer;
+  background: var(--card); color: var(--foreground);
+  border: 1px solid var(--border); border-radius: 8px; padding: .3rem .45rem;
+}
+.slotpick-item:hover { border-color: var(--primary); }
+/* 【2026-11-07 作者实况】槽位①悬停/点击后出现浏览器默认"待选框"（focus outline）：
+   button 的 focus-visible/focus outline 一律去掉——选中态已有 .on 主色描边表达 */
+.slotpick-item:focus, .slotpick-item:focus-visible { outline: none; }
+.slotpick-item:focus:not(.on):not(:hover) { border-color: var(--border); }
+.slotpick-item.on {
+  border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--card));
+  box-shadow: 0 0 0 1px var(--primary) inset;
+}
+.slotpick-item .kc-no { flex: 0 0 auto; }
+.slotpick-item .sp-main { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
+.slotpick-item .sp-main b { font-size: .76rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.slotpick-item .sp-ckpt { font-size: .64rem; color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-mono); }
+.slotpick-item .badges { display: flex; flex-direction: column; gap: .15rem; align-items: flex-end; flex: 0 0 auto; }
+.slotpick-item .badges .badge { font-size: .58rem; padding: .04rem .3rem; }

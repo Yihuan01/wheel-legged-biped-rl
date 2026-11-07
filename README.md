@@ -27,23 +27,19 @@
 
 ## 功能演示
 
+同一套策略权重在两个仿真引擎上的五种动作（Isaac Gym＝训练同源；MuJoCo＝`sim2sim_mujoco` 部署链）。
+图片与视频录制后经 GitHub Release（`demo-media-v2`）挂载。
+
+<!-- 待录制（作者）。建议命名：
+     fourw-<engine> / twow-<engine> / rise-<engine> / crouch-<engine> / jump-<engine>，engine ∈ {isaac, mujoco}
+     每格一个动图（gif/mp4 首帧），或一格图＋一格视频链接 -->
 <table>
-<tr>
-<th>四轮行驶（<code>P7F3e</code>）</th>
-<th>两轮行走（<code>P8W7</code>）</th>
-</tr>
-<tr>
-<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/fourw_drive.gif" alt="四轮行驶"></td>
-<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/twow_walk.gif" alt="两轮行走"></td>
-</tr>
-<tr>
-<th>跳跃（<code>P6R81</code>）</th>
-<th>起立 / 趴下（<code>P7T</code> 脚本 + <code>P7L</code>）</th>
-</tr>
-<tr>
-<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/jump.gif" alt="跳跃"></td>
-<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/standup.gif" alt="起立趴下"></td>
-</tr>
+<tr><th></th><th>Isaac Gym</th><th>MuJoCo</th></tr>
+<tr><th>平地行走 · 四轮</th><td></td><td></td></tr>
+<tr><th>平地行走 · 两轮</th><td></td><td></td></tr>
+<tr><th>起立</th><td></td><td></td></tr>
+<tr><th>蹲下</th><td></td><td></td></tr>
+<tr><th>跳跃</th><td></td><td></td></tr>
 </table>
 
 ## 网页控制台
@@ -54,31 +50,23 @@
 
 - **仿真运行** —— 启动/停止仿真，实时指令滑条（Vx / Yaw / Height / Roll / Jump），
   链模式下一键起立 / 趴下 / 装填跳 / 回两轮 / 回四轮 / 复位 / 切槽（带指令回执条与站定门：
-  |vx|≤0.08 ∧ |pitch|≤5.7° 连续 8 拍才切网），GPU 状态，Isaac 原生窗口停靠区。
-- **Isaac 配置 / MuJoCo 配置** —— 槽位化：四轮 164 / 两轮行走 161 / 两轮跳跃 161 / 趴下 173 /
+  |vx|≤0.08 ∧ |pitch|≤5.7° 连续 8 拍才切网），GPU 状态，Isaac 原生窗口停靠区；MuJoCo 运行时为页面内嵌 3D 视口。
+- **配置Isaac / 配置MJ** —— 槽位化：四轮 164 / 两轮行走 161 / 两轮跳跃 161 / 趴下 173 /
   五槽链（两轮或四轮起步）各一套契约＋资产＋权重；MuJoCo 链支持复杂地形（四象限 demo 图）；
   起立引擎可选 P7T2 脚本链（默认）或 P7S 学习策略；各相位时长参数可调。
 - **数据绘图** —— 遥测曲线：指令三线、竖直速度、跳跃、相位底色、关节力矩；
   Isaac 与 MuJoCo 遥测同列（MuJoCo 由 serve 增量落盘，运行中可跟随）。
 - **使用说明** —— 参数词典、快捷键与存储路径。
 
+<!-- 待截图（作者）：console_run_isaac / console_run_mj / console_cfg_isaac /
+     console_cfg_mj / console_plot / console_help （.png） -->
 <table>
-<tr>
-<th>仿真运行</th>
-<th>模型配置</th>
-</tr>
-<tr>
-<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-run.png" alt="仿真运行"></td>
-<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-model.png" alt="模型配置"></td>
-</tr>
-<tr>
-<th>数据绘图</th>
-<th>使用说明</th>
-</tr>
-<tr>
-<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-plot.png" alt="数据绘图"></td>
-<td><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/console-help.png" alt="使用说明"></td>
-</tr>
+<tr><th>仿真运行 · Isaac Gym</th><th>仿真运行 · MuJoCo</th></tr>
+<tr><td></td><td></td></tr>
+<tr><th>配置Isaac</th><th>配置MJ</th></tr>
+<tr><td></td><td></td></tr>
+<tr><th>数据绘图</th><th>使用说明</th></tr>
+<tr><td></td><td></td></tr>
 </table>
 
 ## 环境要求

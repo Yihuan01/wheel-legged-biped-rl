@@ -58,73 +58,34 @@ def new_chain(vx=0.0):
 # ---------------------------------------------------------------- C1 ×3
 
 def _scan13_round(h_jump=0.10):
-    """scan13 已验证 PASS 的完整单轮流程（runner 手动交棒，绕开 uni_chain IDLE2W 分支）。"""
-    from legged_gym.scripts.sim2sim_mujoco.deploy.obs_builder import ObsBuilder
-    from legged_gym.scripts.sim2sim_mujoco.deploy.policy import Policy
-    MJCF = os.path.join(PKG, "assets/mjcf/wbr_v2.xml")
-    c4 = load_contract(os.path.join(PKG, "assets/deploy_contract.json"))
-    c2 = load_contract(os.path.join(PKG, "assets/deploy_contract_two_v2.json"))
-    cl = load_contract(os.path.join(PKG, "assets/deploy_contract_lie.json"))
-    LEG = ("left_hip_joint", "left_knee_joint", "right_hip_joint", "right_knee_joint")
-    l = SimLoop(MJCF, c4, ckpt=resolve_model(c4), mode="policy")
-    l.obs_b = ObsBuilder(c4, dof_names=c4["dof_names"], default_dof_pos=c4["default_dof_pos"])
-    l.slew = False
-    l.set_cmd("lin_vel_x", 0.0); l.set_cmd("base_height", 0.19); l.snap_cmds()
-    dt = float(c4["control_dt"])
-    for _ in range(int(1.4 / dt)): l.step()
-    l.activate_p7t2(dict(kp=0, kd=0, kd2=2.0, T=0.5, k_roll=2.5, throw_c=0.4))
-    l.term_pitch_ovr = 1.3; l.term_roll_ovr = 1.3; l.caster_air_ok = True
-    handed = False; t_hand = None
-    for i in range(int(14.0 / dt)):
-        l.step()
-        R, q, lin, ang = l.sim.base_state(); pg = l.sim.projected_gravity(R)
-        pp, rr = l.sim.body_pitch_roll(pg)
-        p7t2 = l.p7t; tl = (p7t2.t_lift if p7t2 and p7t2.t_lift > 0 else 0)
-        rate = abs(-float(ang[1]))
-        if not handed and tl >= 0.7 and abs(pp) < 0.10 and pp <= 0.02 and rate < 0.5:
-            handed = True; t_hand = i * dt
-            l.c = c2; l.obs_b.set_contract(c2); l.ctl.set_contract(c2)
-            l.wheel_i = [j for j, n in enumerate(c2["dof_names"]) if "wheel" in n]
-            l.pol = Policy(resolve_model(c2, "releases/P8W7_push01_fric05", "model_2800.pt"), 161, 6)
-            l.ctl.off_knee = -0.1; l.ctl.off_hip = 0.0; l.jump["off"] = -0.1
-            for k, n in enumerate(LEG):
-                l.ctl.default[l.c["dof_names"].index(n)] = [1.0, -2.1, -1.0, 2.1][k]
-            l.action_ramp = (int(2.0 / dt), int(2.0 / dt))
-            l.term_pitch_ovr = 1.0; l.term_roll_ovr = 1.0
-            l.ctl.wheel_override = None; l.ctl.wheel_override_l = None; l.ctl.wheel_override_r = None
-            l.p7t = None; l.p7t_done = True
-            break
-    if not handed:
-        raise RuntimeError(f"[scan13] 未交棒：{l.terminated}")
-    # 渐入 2s + 停稳
-    for _ in range(int(2.0 / dt)):
-        l.step()
-        if l.terminated: break
-    hit, t = 0, 0.0
-    while t < 6.0 and l.terminated is None:
-        l.step(); t += dt
-        R, q, lin, ang = l.sim.base_state(); pg = l.sim.projected_gravity(R)
-        pp, _r = l.sim.body_pitch_roll(pg)
-        hit = hit + 1 if abs(pp) < 0.10 else 0
-        if hit >= 8: break
-    if l.terminated: raise RuntimeError(f"[scan13] 停稳期终止：{l.terminated}")
-    # 趴下：h 恢复 0.19 保持、切 173 契约、相位脚本
-    l.c = cl; l.obs_b.set_contract(cl); l.ctl.set_contract(cl)
-    l.wheel_i = [j for j, n in enumerate(cl["dof_names"]) if "wheel" in n]
-    l.pol = Policy(resolve_model(cl, "releases/P7L_liedown", "model_300.pt"), 173, 6)
-    l.ctl.off_knee = 0.0
-    l.set_switch_phase(3)
-    l.set_cmd("lin_vel_x", 0.0); l.set_cmd("base_height", 0.19)
-    LIE_T = (0.30, 0.80, 1.10, 1.50)
-    t0 = t
-    for i in range(int(2.2 / dt)):
-        l.step()
-        tt = t + i * dt
-        ph = 3 if tt-t0 < 0.30 else 4 if tt-t0 < 0.80 else 5 if tt-t0 < 1.10 else 6 if tt-t0 < 1.50 else 0
-        l.set_switch_phase(ph)
-        if l.terminated: break
-    if l.terminated: raise RuntimeError(f"[scan13] 趴下终止：{l.terminated}")
-    return {"rise_handover_s": round(t_hand, 2), "lower_s": round(2.2, 2), "term": None}
+    """P7T2 起立→停稳→趴下→回四轮（**全走 UniChain**，与控制台同一条路径）。
+
+    全走 UniChain（RISE 真起立、交棒渐入分通道），与控制台同一条路径。
+    ⚠ 不得绕开 IDLE2W 分支手工切契约/摆 default——那测的就不是控制台实际跑的路径。
+    """
+    # vx=0.0：链的默认 vx 是 0.3（行进档），交棒 2 s 后会把指令恢复成 0.3 ⇒ 机器人开始走，
+    #   紧接着的「趴下」在行走中执行会前翻（实测 pitch −0.5 终止）。控制台默认 cmds.vx=0，
+    #   评估按控制台口径来。
+    ch = UniChain(start="4w", interactive=True, allow_rise=True, vx=0.0,
+                  p7t_params={"standup_engine": "p7t2"})
+    wait_settle(ch, timeout=4.0, what="4W 静稳")
+    ch.request("next")                      # 4W → RISE（真起立）
+    t0 = ch.t_total
+    while ch.slot != "IDLE2W":
+        if not ch.step():
+            raise RuntimeError(f"[C1] 起立终止：{ch.loop.terminated}")
+        if ch.t_total - t0 > 12.0:
+            raise RuntimeError("[C1] 起立 12s 未完成")
+    rise_s = ch.t_total - t0
+    wait_settle(ch, timeout=8.0, what="起立后停稳")
+    ch.request("lower")                     # 两轮 → 趴下
+    t1 = ch.t_total
+    while ch.slot != "HOLD4W":
+        if not ch.step():
+            raise RuntimeError(f"[C1] 趴下终止：{ch.loop.terminated}")
+        if ch.t_total - t1 > 8.0:
+            raise RuntimeError("[C1] 趴下 8s 未完成")
+    return {"rise_s": round(rise_s, 2), "lower_s": round(ch.t_total - t1, 2), "term": None}
 
 
 def c1_cycles(n=3):
@@ -134,7 +95,7 @@ def c1_cycles(n=3):
         r = _scan13_round()
         r["i"] = i + 1
         out.append(r)
-        print(f"  C1 {i+1}/{n}: 起立交棒 {r['rise_handover_s']}s / 趴下 {r['lower_s']}s ✅", flush=True)
+        print(f"  C1 {i+1}/{n}: 起立 {r['rise_s']}s / 趴下 {r['lower_s']}s ✅", flush=True)
     return out
 
 

@@ -67,10 +67,10 @@ class Terrain:
 
         self.height_field_raw = np.zeros((self.tot_rows, self.tot_cols), dtype=np.int16)
 
-        # 【P8 2026-10-28】优先加载预生成的高度图文件（.npz）。
-        #   P8 的地形由 `envs/wbr/terrain/wbr_rand_gen.py` 离线生成（无向随机起伏），
-        #   训练侧只负责读图 + 派生 trimesh / height_samples，保证"物理面 == 高程采样源"。
-        #   cfg.height_field_file 为空 ⇒ 走原程序化路径（对既有任务零影响）。
+        # 优先加载预生成的高度图文件（.npz）。
+        # P8 的地形由 `envs/wbr/terrain/wbr_rand_gen.py` 离线生成（无向随机起伏），
+        # 训练侧只负责读图 + 派生 trimesh / height_samples，保证"物理面 == 高程采样源"。
+        # cfg.height_field_file 为空 ⇒ 走原程序化路径（对既有任务零影响）。
         self.height_field_file = getattr(cfg, "height_field_file", None)
         self.cell_meta = None
         if self.height_field_file:
@@ -298,8 +298,8 @@ class Terrain:
         self.cell_meta = meta
 
         # env_origins：出生点取**生成器声明的平台中心**（不写死"格中心"）。
-        #   【P8W1】平台被挪到格子入口端 ⇒ 起伏区从 2.0 m 增到 3.5 m。
-        #   若 meta 没有 spawn_center_m（旧地形文件），回退到格中心。
+        # 【P8W1】平台被挪到格子入口端 ⇒ 起伏区从 2.0 m 增到 3.5 m。
+        # 若 meta 没有 spawn_center_m（旧地形文件），回退到格中心。
         sc = meta.get("spawn_center_m")
         for i in range(self.cfg.num_rows):
             for j in range(self.cfg.num_cols):
@@ -414,10 +414,10 @@ class Terrain:
         env_origin_x = (i + 0.5) * self.env_length
         env_origin_y = (j + 0.5) * self.env_width
         # 原点 z：在 2×2 方形区域内采样。
-        #   【P8 2026-10-28】原来取 np.max，在**随机起伏地形**上等于"取该区域最高点"，
-        #   机器人会在比脚下地面高出数厘米的位置出生并直接掉下来（每回合开场就摔，
-        #   课程根本推不动）。改为取**中心小窗口的均值**，与脚实际站立的地面一致。
-        #   静态地形（平地/设计好平台的格子）上两者的差别可以忽略，故对既有行为无影响。
+        # 原来取 np.max，在**随机起伏地形**上等于"取该区域最高点"，
+        # 机器人会在比脚下地面高出数厘米的位置出生并直接掉下来（每回合开场就摔，
+        # 课程根本推不动）。改为取**中心小窗口的均值**，与脚实际站立的地面一致。
+        # 静态地形（平地/设计好平台的格子）上两者的差别可以忽略，故对既有行为无影响。
         x1 = int((self.env_length / 2.0 - 1) / terrain.horizontal_scale)
         x2 = int((self.env_length / 2.0 + 1) / terrain.horizontal_scale)
         y1 = int((self.env_width / 2.0 - 1) / terrain.horizontal_scale)

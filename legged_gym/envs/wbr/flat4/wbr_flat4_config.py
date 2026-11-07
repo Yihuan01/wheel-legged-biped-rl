@@ -3,7 +3,7 @@
 # Author    : SYH
 # File      : wbr_flat4_config.py
 # Purpose   : 四轮任务 wbr_flat4 的配置：观测 164 维（基础 33 + 历史 120 + 跳跃相位 8 +
-#             从动轮接触 2 + 倾翻裕度 1），动作 6 维（2 轮 + 4 腿，从动轮被动）。
+# 从动轮接触 2 + 倾翻裕度 1），动作 6 维（2 轮 + 4 腿，从动轮被动）。
 # ==============================================================================
 
 from legged_gym.envs.wbr.flat.wbr_flat_config import WBRFlatCfg, WBRFlatCfgPPO
@@ -27,15 +27,15 @@ class WBRFlat4Cfg(WBRFlatCfg):
 
     class init_state(WBRFlatCfg.init_state):
         # 站姿：躯干水平（pitch = 0），四轮着地，默认工作高 0.19 m。
-        #   姿态解（对称双腿，四点全触 z=0，见 geo_check 精解）：
-        #     hip=±56.34° (0.9833 rad)、knee=∓146.61° (−2.5589 rad)，base_z=0.1900 m
-        #   关系：knee = −90° − hip（同时解膝+高度使轮与从动轮都触地）。
+        # 姿态解（对称双腿，四点全触 z=0，见 geo_check 精解）：
+        # hip=±56.34° (0.9833 rad)、knee=∓146.61° (−2.5589 rad)，base_z=0.1900 m
+        # 关系：knee = −90° − hip（同时解膝+高度使轮与从动轮都触地）。
         pos = [0.0, 0.0, 0.19]
         rot = [0.0, 0.0, 0.0, 1.0]  # x,y,z,w；躯干水平（pitch=0）
         lin_vel = [0.0, 0.0, 0.0]
         ang_vel = [0.0, 0.0, 0.0]
         # ★必须列出全部 8 个关节（基类 _init_buffers 逐 dof 名查此字典，缺键即崩）
-        #   顺序与 URDF 一致：l_hip,l_knee,l_wheel,r_hip,r_knee,r_wheel,l_caster,r_caster
+        # 顺序与 URDF 一致：l_hip,l_knee,l_wheel,r_hip,r_knee,r_wheel,l_caster,r_caster
         default_joint_angles = {
             'left_hip_joint': 0.9833,           # +56.34°
             'left_knee_joint': -2.5589,         # −146.61°
@@ -62,7 +62,7 @@ class WBRFlat4Cfg(WBRFlatCfg):
             'caster': 0.02,
         }
         leg_action_scale = 0.5
-        wheel_action_scale = 3.0   # 【P7F4 v2】保持 3.0：v1 改 5.5 造成 ×1.83 输出重映射，F3e 基座倒退全崩（diag 实证：F3e 在新 env 下 −1.0 全摔、全体过冲 15~45%）；旧输出映射必须零扰动
+        wheel_action_scale = 3.0   # 保持 3.0：v1 改 5.5 造成 ×1.83 输出重映射，F3e 基座倒退全崩（diag 实证：F3e 在新 env 下 −1.0 全摔、全体过冲 15~45%）；旧输出映射必须零扰动
         wheel_target_accel_limit = 0.0
         wheel_acceleration_filter_alpha = 0.8
         decimation = 2
@@ -76,14 +76,14 @@ class WBRFlat4Cfg(WBRFlatCfg):
         terminate_after_contacts_on = ["base_link", "thigh"]
         flip_visual_attachments = False
         # 必须关自碰撞：pitch = 0 的深折姿态下 thigh 盒与 wheel 盘间隙仅约 10 mm
-        #   （0.19m 处解析间隙 +9.7mm，落在 10mm contact_offset 内；0.17m 处真实重叠 ~1mm），
-        #   开自碰撞会产生假接触力→假 base_term→每步终止。原 −48° 姿态无重叠对，故此前为 0 也无碍。
+        # （0.19m 处解析间隙 +9.7mm，落在 10mm contact_offset 内；0.17m 处真实重叠 ~1mm），
+        # 开自碰撞会产生假接触力→假 base_term→每步终止（−48° 姿态无重叠对，才保持得了关闭）。
         self_collisions = 1
 
     class domain_rand(WBRFlatCfg.domain_rand):
         # 四轮域随机化，共 15 项：sim 侧 10 + 传感器侧 5。
-        #   驱动轮摩擦/基座质量/水平推扰（基类）；从动轮质量/摩擦（wbr4）；
-        #   pd/motor/com/damp/pitch + 陀螺/加计/重力 bias + obs/act 延迟（wbr4 内实现，未改 wbr.py）。
+        # 驱动轮摩擦/基座质量/水平推扰（基类）；从动轮质量/摩擦（wbr4）；
+        # pd/motor/com/damp/pitch + 陀螺/加计/重力 bias + obs/act 延迟（wbr4 内实现，未改 wbr.py）。
         enable_dr_sim = True                  # sim 侧总闸（启用从动轮质量/摩擦随机化）
         randomize_friction = True             # 驱动轮地摩擦随机化
         friction_range = [0.8, 1.2]           # 驱动轮地面摩擦区间
@@ -100,7 +100,7 @@ class WBRFlat4Cfg(WBRFlatCfg):
         pd_gain_range = [0.9, 1.1]            # 腿部 PD 增益乘子
         motor_strength_range = [0.9, 1.1]     # 电机力矩乘子
         com_offset_range = [-0.01, 0.01]      # 基座质心三轴偏移（m）
-        caster_joint_damp_range = [0.015, 0.03]  # 从动轮关节阻尼区间【P7F7 回滚 F3e 态：低阻尼零收益且扰动已学步态（Phase 1/载荷探针判决）】
+        caster_joint_damp_range = [0.015, 0.03]  # 从动轮关节阻尼区间
         push_pitch_vel_max = 0.2              # 推扰叠加的俯仰角速度脉冲
         imu_gyro_bias_range = [-0.03, 0.03]   # 陀螺零偏（rad/s）
         imu_acc_bias_range = [-0.1, 0.1]      # 加计零偏（m/s²）
@@ -126,7 +126,7 @@ class WBRFlat4Cfg(WBRFlatCfg):
             turning_wheel = 2.0        # 转向轮形塑：yaw 时奖励同向轮转 ωL + ωR ≈ 4.5·yaw
             tracking_base_height = 5.0  # 体高跟踪权重；顶端物理上限 0.246 m
             # ── 姿态与平顺 ──
-            orientation = -5.0         # 【P7F7 回滚 −5】：一次一变量，本轮唯一增量=hinge 收紧；水平激励留终轮
+            orientation = -5.0         # ：一次一变量，本轮唯一增量=hinge 收紧；水平激励留终轮
             lin_vel_z = -4.0
             ang_vel_xy = -1.2          # 俯仰 / 滚转角速度惩罚，抑制抖动
             wrong_way = -2.0
@@ -154,7 +154,7 @@ class WBRFlat4Cfg(WBRFlatCfg):
             jump_leg_apex = 0.0
 
         # 复用基类阈值
-        velocity_tracking_error_limit = 0.45  # 【P7F7】0.8→0.45：线速度 hinge 收紧（载荷探针判决主因=远端欠指令，带宽过宽稀释梯度；对齐两轮 W3「量程≤带宽」惯例 ±1.5/0.45）
+        velocity_tracking_error_limit = 0.45  # 0.8→0.45：线速度 hinge 收紧（载荷探针判决主因=远端欠指令，带宽过宽稀释梯度；对齐两轮 W3「量程≤带宽」惯例 ±1.5/0.45）
         yaw_tracking_error_limit = 0.5       # 偏航 hinge 带宽；cmd ±1.0 时误差约 0.1 < 0.5，梯度充足
         height_tracking_error_limit = 0.05   # 体高 hinge 带宽（收窄后顶端仍有梯度）
         roll_tracking_gain = 60.0
@@ -175,22 +175,22 @@ class WBRFlat4Cfg(WBRFlatCfg):
         turning_roll_coeff = 0.0        # 不压弯
 
         class ranges:
-            lin_vel_x = [-1.5, 1.5]     # 【P7F4 StageA】±1.0→±1.5：vx 提速第一档（预注册计划 §3）
+            lin_vel_x = [-1.5, 1.5]     # ±1.0→±1.5：vx 提速第一档（预注册计划 §3）
             lin_vel_y = [0.0, 0.0]
-            ang_vel_yaw = [-1.5, 1.5]   # 【P7F5 StageB】±1.0→±1.5：偏航提速（预注册计划 §3；兼作 Stage A 极值收敛续训）
+            ang_vel_yaw = [-1.5, 1.5]   # ±1.0→±1.5：偏航提速（预注册计划 §3；兼作 Stage A 极值收敛续训）
             heading = [0, 0]
             jump_height = [0.05, 0.05]  # 闸门关死
             # 高度固定 0.19 m（区间退化）。
-            #   半宽地板已在 wbr_flat4.py 观测归一化处理（0.05），退化不再爆炸。
+            # 半宽地板已在 wbr_flat4.py 观测归一化处理（0.05）。
             base_height = [0.175, 0.245]  # 体高指令量程（m）；可达范围 0.171~0.246，两端留余量
             ang_roll = [0.0, 0.0]
 
         class envelope(WBRFlatCfg.commands.envelope):
-            # 【P7F4】取消 yaw 包络：b=2.14/k=1.34 为两轮平衡模式的 vx·ω 耦合遗产
-            #   （定义见 wbr_flat_config.py），四轮差速＋万向轮不吃这套限制。
-            #   放大 expand ⇒ cap 永不绑定（wbr_flat4.py::_apply_command_envelope 的现成旁路键）。
-            #   安全核算：轮距 0.187 m，(vx2.0, yaw1.5) 需轮速 2.14 m/s < 轮速上限
-            #   2.2 m/s（clip 5 × scale 5.5 × r 0.08）——轮速饱和即四轮自身物理包络。
+            # 取消 yaw 包络：b=2.14/k=1.34 为两轮平衡模式的 vx·ω 耦合遗产
+            # （定义见 wbr_flat_config.py），四轮差速＋万向轮不吃这套限制。
+            # 放大 expand ⇒ cap 永不绑定（wbr_flat4.py::_apply_command_envelope 的现成旁路键）。
+            # 安全核算：轮距 0.187 m，(vx2.0, yaw1.5) 需轮速 2.14 m/s < 轮速上限
+            # 2.2 m/s（clip 5 × scale 5.5 × r 0.08）——轮速饱和即四轮自身物理包络。
             expand = 1e3
 
     class normalization(WBRFlatCfg.normalization):
@@ -204,12 +204,12 @@ class WBRFlat4Cfg(WBRFlatCfg):
             joint_state_history = 0.25
             height_measurements = 5.0
         clip_observations = 100.
-        clip_actions = 9.2   # 【P7F4】5→9.2：轮速上限 15→27.6 rad/s（1.2→2.21 m/s）；抬 clip 不动 scale，旧输出（|a|≤5）映射与 F3e 逐位一致，新速度 headroom 靠更大输出触达
+        clip_actions = 9.2   # 5→9.2：轮速上限 15→27.6 rad/s（1.2→2.21 m/s）；抬 clip 不动 scale，旧输出（|a|≤5）映射与 F3e 逐位一致，新速度 headroom 靠更大输出触达
 
 
 class WBRFlat4CfgPPO(WBRFlatCfgPPO):
     class algorithm(WBRFlatCfgPPO.algorithm):
-        # 【P7F4】热启动统一降 lr（3e-4→1e-4），同两轮线 P8W6a：此前 6/6 次热启动行为漂移，降 lr 抑制。
+        # 热启动统一降 lr（3e-4→1e-4），同两轮线 P8W6a：不降则热启动必现行为漂移。
         learning_rate = 1.0e-4
 
     class runner(WBRFlatCfgPPO.runner):

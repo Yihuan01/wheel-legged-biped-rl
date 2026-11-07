@@ -10,12 +10,12 @@
 
 """P7 混合部署 · 链上验收驱动（不训练，只驱动控制台跑一条固定序列）。
 
-序列（约 30 s）：四轮静稳 → 脚本起立(P7T) → 两轮站定 → 跳跃 0.05/0.10/0.15（每次落地站住）
+序列（约 30 s）：四轮静稳 → 脚本起立(P7T2) → 两轮站定 → 跳跃 0.05/0.10/0.15（每次落地站住）
                 → 给 vx 行走 → 减速到停 → 趴下(P7L) → 四轮
 
 它只调控制台的只读/控制 API（`/api/state`、`/api/start`、`/api/cmd`、`/api/action`），
 跑完把 TSV 路径与逐段实测值打出来；TSV 的 `ev_takeoff/ev_land/jump_apex/v_impact/rise_sub`
-是 2026-10-27 新加的事件列，判据表直接读这些列，不再需要探针复算。
+是事件列，判据表直接读这些列，无需探针复算。
 
 用法：
     python wbr_chain_check.py --scenario P7T_脚本起立R81 --port 8770
@@ -79,7 +79,7 @@ class Driver:
     def wait_settle(self, min_s=0.0, vx_tol=0.08, timeout=12.0, what="停稳"):
         """等两轮真正停住（|act_vx|≤vx_tol 连续 3 拍）再切模式——C4 裁定的"停止状态切"。
         交接后 P7T 的抬升力矩会把机器人推着后滚 0.4~0.6 m/s，R81 要 1~2 s 才刹住；
-        不等就趴下会连人带车翻过去（2026-10-28 C1 循环实测）。"""
+        不等就趴下会连人带车翻过去（C1 循环实测）。"""
         t0 = time.time()
         need, hit, last = 3, 0, None
         while time.time() - t0 < timeout:
@@ -179,8 +179,9 @@ def main():
     print(f"▶ 已启动 run={run_id}")
     st = d.wait(lambda s: s.get("modeCN") == "四轮" and s.get("hasReadout"), 45, "等四轮就绪", grace=25)
     # 桥的 telemetry 字段是 {"file": ..., "sizeMB": ..., "rows": ...}，且只给文件名（不带目录）。
-    #   2026-11-05 修：原来读的 "name" 键不存在 ⇒ tsv 恒 None ⇒ 三档站定跳读不到事件列。
-    #   兜底：直接 glob 最新一份 wbr_switch_tel_*.tsv（每次仿真启动新建一份）。
+    #   ⚠ 键名是 "file"（读 "name" 会恒 None ⇒ 三档站定跳读不到事件列）。
+    #   兜底：直接 glob 最新一份双模式 TSV（新前缀 Isaac_2_，旧前缀 wbr_switch_tel_
+    #   保留兼容；每次仿真启动新建一份）。
     import glob as _glob
     tsv = None
     for _ in range(40):
@@ -189,7 +190,8 @@ def main():
         if _nm and _nm not in ("—", ""):
             tsv = _nm if os.path.isabs(_nm) else os.path.join(_data_dir(), os.path.basename(_nm))
         if not tsv or not os.path.isfile(tsv):
-            _c = _glob.glob(os.path.join(_data_dir(), "wbr_switch_tel_*.tsv"))
+            _c = _glob.glob(os.path.join(_data_dir(), "Isaac_2_*.tsv")) + \
+                _glob.glob(os.path.join(_data_dir(), "wbr_switch_tel_*.tsv"))
             tsv = max(_c, key=os.path.getmtime) if _c else tsv
         if tsv and os.path.isfile(tsv) and os.path.getsize(tsv) > 0:
             break
@@ -284,10 +286,11 @@ def main():
         d.wait(lambda s: s.get("phUni") == 0, 6, "行进跳：事件结束")   # phUni=0 是合法值，不能走 or 短路
         time.sleep(1.0)                      # 交还行走网后重新加速
         st = d.state()                       # 【修复】事件后状态在此刻取（原版用了③段的过期 st）
-        # 遥测 TSV 用 glob 最新（桥的 telemetry 字段不带 name；wbr_switch_tel_*.tsv 每次
-        #   仿真启动新建一份，行进跳时刻的最新文件必是本 run 的）
+        # 遥测 TSV 用 glob 最新（新前缀 Isaac_2_、旧前缀兼容；每次仿真启动新建一份，
+        #   行进跳时刻的最新文件必是本 run 的）
         import glob as _glob
-        _cands = _glob.glob(os.path.join(_data_dir(), "wbr_switch_tel_*.tsv"))
+        _cands = (_glob.glob(os.path.join(_data_dir(), "Isaac_2_*.tsv"))
+                  + _glob.glob(os.path.join(_data_dir(), "wbr_switch_tel_*.tsv")))
         _tsv_now = max(_cands, key=os.path.getmtime) if _cands else tsv
         m = _last_jump_metrics(_tsv_now) if _tsv_now else None
         cw = _ctrl_window_stats(_tsv_now) if _tsv_now else {}

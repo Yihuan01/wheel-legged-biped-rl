@@ -98,10 +98,10 @@ class BaseTask():
                 self.viewer, gymapi.KEY_ESCAPE, "QUIT")
             self.gym.subscribe_viewer_keyboard_event(
                 self.viewer, gymapi.KEY_V, "toggle_viewer_sync")
-            # 【2026-10-29】光照：默认单灯太硬，平地一片均匀灰、看不出起伏。
-            #   压低直射、抬高环境光、方向改成斜射 ⇒ 靠明暗也能读出坡面
-            #   （`set_light_parameters` 全局生效，只影响 viewer/相机画面，不改物理）。
-            #   键在 cfg.viewer 里，退化值即"不动"。
+            # 光照：默认单灯太硬，平地一片均匀灰、看不出起伏。
+            # 压低直射、抬高环境光、方向斜射 ⇒ 靠明暗读出坡面
+            # （`set_light_parameters` 全局生效，只影响 viewer/相机画面，不改物理）。
+            # 键在 cfg.viewer 里，退化值即"不动"。
             try:
                 li = getattr(self.cfg.viewer, "light_intensity", None)
                 print(f"[viewer] light_intensity={li}")
@@ -111,7 +111,7 @@ class BaseTask():
                         gymapi.Vec3(*li),
                         gymapi.Vec3(*getattr(self.cfg.viewer, "light_ambient", [0.55, 0.55, 0.55])),
                         gymapi.Vec3(*getattr(self.cfg.viewer, "light_direction", [-0.6, 0.6, -0.55])))
-                # 【2026-11-01】第二盏方向光（低角度反侧补光）：None = 不设（保持出厂）
+                # 第二盏方向光（低角度反侧补光）：None = 不设（保持出厂）
                 li2 = getattr(self.cfg.viewer, "light2_intensity", None)
                 if li2 is not None:
                     print(f"[viewer] light2_intensity={li2}")

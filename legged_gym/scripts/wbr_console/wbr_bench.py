@@ -3,7 +3,7 @@
 # Author    : SYH
 # File      : wbr_bench.py
 # Purpose   : 控制台后端：静态站点 + 试验台 API（模型扫描 / 预检 / 场景 / 启停 / 绘图）+
-#             控制桥代理，纯标准库实现。
+# 控制桥代理，纯标准库实现。
 # ==============================================================================
 
 import argparse
@@ -67,7 +67,7 @@ SLOT_SPEC = {
     "w3": {"stage": "③ 两轮站立/行走", "obs": 161, "act": 6},
     "lie": {"stage": "④ 趴下", "obs": 173, "act": 6},
     # 【P8 五槽】跳跃槽（事件级）：两轮行走网常驻，跳跃事件窗（env.ph>0）内由跳跃网接管。
-    #   161 维与 w3 槽同 perm（W3_ACT_PERM）；空槽=不加载（两轮无跳跃能力，预检按就绪计）。
+    # 161 维与 w3 槽同 perm（W3_ACT_PERM）；空槽=不加载（两轮无跳跃能力，预检按就绪计）。
     "jump": {"stage": "⑤ 跳跃", "obs": 161, "act": 6},
 }
 # 单策略：task → 期望 obs（用于校验 checkpoint 与 task 是否匹配）
@@ -311,11 +311,15 @@ def _save_pngs(body):
 
 
 def _tel_logs():
-    """列 wbr_play_data 下的遥测文件（新→旧）。"""
+    """列 wbr_play_data 下的遥测文件（新→旧）。
+    新前缀 Isaac_1_/Isaac_2_/MJ_ 不含 "_tel_" —— 过滤改为
+    前缀白名单（旧 "_tel_" in n 会漏掉全部新日志 ⇒ 运行页抽屉列表不更新）。"""
     d = os.path.normpath(os.path.join(HERE, "..", "wbr_play_data"))
     out = []
     if os.path.isdir(d):
-        names = [n for n in os.listdir(d) if n.endswith(".tsv") and "_tel_" in n]
+        _PREFIX = ("Isaac_1_", "Isaac_2_", "MJ_", "wbr_tel_", "wbr_switch_tel_")
+        names = [n for n in os.listdir(d)
+                 if n.endswith(".tsv") and n.startswith(_PREFIX)]
         names.sort(key=lambda n: os.path.getmtime(os.path.join(d, n)), reverse=True)
         for i, n in enumerate(names):
             full = os.path.join(d, n)
@@ -356,7 +360,7 @@ def _check_terrain_geometry(single, items):
         items.append({"level": "bad", "text": f"地形：{os.path.basename(_tf)}（文件不存在）"})
         return
     # 任务 cfg 的几何值必须 import isaacgym，预检在服务端进程里不做 —— 用文件 meta 反查
-    #   "有没有 cfg 会推导出与文件不符的尺寸"，只在已知任务上做静态表校验。
+    # "有没有 cfg 会推导出与文件不符的尺寸"，只在已知任务上做静态表校验。
     try:
         d = _np.load(full, allow_pickle=False)
         hf = d["height_field_raw"]
@@ -376,8 +380,8 @@ def _check_terrain_geometry(single, items):
 
 
 # 【P8 五槽·点击校准】页面 CSS 坐标 ↔ 屏幕设备坐标 配对（/api/point 采集）。
-#   持久化到 wbr_bench_store/calibration.json：8770 重启不丢（校准一次长期有效；
-#   浏览器挪屏/改缩放后再点几下即自动更新）。
+# 持久化到 wbr_bench_store/calibration.json：8770 重启不丢（校准一次长期有效；
+# 浏览器挪屏/改缩放后再点几下即自动更新）。
 _PAIRS = []
 _CAL_FILE = None
 
@@ -534,7 +538,7 @@ def _preflight_mujoco(spec):
         terrain = bool(spec.get("terrain"))
         items = _preflight_mujoco_chain(spec)
         if str(spec.get("start") or "2w") == "4w":
-            items.append({"level": "warn", "text": "四轮起步：事件驱动下起立按钮会被守卫明确拒绝（未收口），可用「回两轮」直接切"})
+            items.append({"level": "ok", "text": "四轮起步：起立走 RISE（P7T2 脚本真起立，2.9 s 完成，无瞬移）"})
         else:
             items.append({"level": "ok", "text": "两轮起步：槽位停住等面板指令（起立/趴下/跳跃/回四轮/复位），不自动放完" +
                           ("；地形模式自动播放链跳过跳跃槽" if terrain else "")})
@@ -648,7 +652,7 @@ def _preflight_mujoco_chain(spec):
         sk.close()
     items.append({"level": "ok" if free else "bad", "text": f"桥端口 {port}：" + ("空闲" if free else "被占用")})
     if str(spec.get("start") or "2w") == "4w":
-        items.append({"level": "warn", "text": "四轮起步的链含 P7T 起立——MuJoCo 侧起立未收口，会在 RISE 槽发散（见 S3 产物 README）"})
+        items.append({"level": "ok", "text": "四轮起步的链含 P7T2 起立：4W→RISE（真起立）→IDLE2W，验收 C1×3 全过"})
     else:
         items.append({"level": "ok", "text": "两轮起步：行走→跳跃→趴下→四轮，四槽已验证零终止"})
     items.append({"level": "info", "text": "MuJoCo 纯 CPU 运行，可与训练并行（不查 CUDA/训练进程）"})
@@ -666,10 +670,10 @@ def _preflight_isaac(spec):
             n_slots += 1
             path = (spec.get("slots") or {}).get(key)
             # 起立槽支持相位脚本：值可写成 {"type":"script"}（无权重），
-            #   此时该槽不查权重，按"已就绪"计（四格保留，仍显示 4/4）。字符串/字典两种都认。
+            # 此时该槽不查权重，按"已就绪"计（四格保留，仍显示 4/4）。字符串/字典两种都认。
             if key == "standup" and isinstance(path, dict) and str(path.get("type", "")).lower() == "script":
                 ok += 1
-                items.append({"level": "ok", "text": f"{meta['stage']}：相位脚本（P7T，无需权重）"})
+                items.append({"level": "ok", "text": f"{meta['stage']}：相位脚本（P7T2，无需权重）"})
                 dims.append("script")
                 continue
             if not path:
@@ -1026,11 +1030,9 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 info = _launch(spec)
                 # 【P8 五槽】窗口对齐＝前端自动停靠（dockWhenReady：仿真运行即把 Isaac 窗口
-                #   贴到 仿真视口 面板矩形下，dock 自校准 3 次收敛）。此处不再另起 win_align
-                #   进程——两个写入者抢窗口位置会互相破坏停靠（11-04 实测）；win_align.py 保留
-                #   作诊断/独立摆放工具（python win_align.py 列窗口；--align 可手动摆）。
-                # ⚠ 必须回包：上面删掉 win_align 时漏了这一行，客户端拿到的是"连接被关闭无响应"
-                #   （11-05 链检复现），/api/start 的返回体就是 _launch 的 info。
+                # 贴到 仿真视口 面板矩形下，dock 自校准 3 次收敛）。不另起 win_align 进程——
+                # 两个写入者抢窗口位置会互相破坏停靠；win_align.py 保留作诊断/独立摆放工具。
+                # ⚠ 必须回包：漏了这行客户端拿到的是"连接被关闭无响应"，/api/start 的返回体就是 _launch 的 info。
                 self._json(200, info)
             elif path == "/api/stop":
                 self._json(200, _stop())
@@ -1042,9 +1044,9 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, bridge_post("/api/action", body))
             elif path == "/api/point":
                 # 【P8 五槽·点击校准】前端把每次点击的页面坐标发上来，后端同步读鼠标
-                #   指针的真实设备坐标（xwin.pointer，全局设备像素）配成一对。两组不同
-                #   位置的点击即可解出「页面 CSS → 屏幕设备」的变换（统一 scale + 每轴
-                #   原点，最小二乘）——比 window.screenX 跨屏估算可靠（指针是 X11 真值）。
+                # 指针的真实设备坐标（xwin.pointer，全局设备像素）配成一对。两组不同
+                # 位置的点击即可解出「页面 CSS → 屏幕设备」的变换（统一 scale + 每轴
+                # 原点，最小二乘）——比 window.screenX 跨屏估算可靠（指针是 X11 真值）。
                 try:
                     cx = float(body.get("cx")); cy = float(body.get("cy"))
                 except (TypeError, ValueError):
@@ -1064,8 +1066,8 @@ class Handler(BaseHTTPRequestHandler):
                     self._json(503, {"error": "无 X 显示，窗口停靠不可用"})
                     return
                 # 【P8 五槽·页面基准停靠】目标矩形优先用「点击校准」解出的变换
-                #   （页面 CSS → 屏幕设备，指针真值配对，多屏/分数缩放下精确）；
-                #   未解出时回退浏览器 X 原点合成（次准）→ 再退前端绝对估算（末选）。
+                # （页面 CSS → 屏幕设备，指针真值配对，多屏/分数缩放下精确）；
+                # 未解出时回退浏览器 X 原点合成（次准）→ 再退前端绝对估算（末选）。
                 _pg = body.get("page")
                 _xf = _solve_xform()
                 if _pg and not _xf:

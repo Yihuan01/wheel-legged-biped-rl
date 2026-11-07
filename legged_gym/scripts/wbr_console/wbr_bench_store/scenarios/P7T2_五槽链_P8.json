@@ -1,0 +1,53 @@
+{
+ "mode": "uni",
+ "slots": {
+  "fourw": "releases/P7F3e_yaw1_dr15/model_11800.pt",
+  "standup": {
+   "type": "script"
+  },
+  "w3": "releases/P8W7_push01_fric05/model_2800.pt",
+  "lie": "releases/P7L_liedown/model_300.pt",
+  "jump": "releases/P8J3d_wheelfollow_lite/model_5650.pt"
+ },
+ "params": {
+  "standup_mode": "script",
+  "t_align": 0.3,
+  "t_rise": 0.2,
+  "t_handover": 0.05,
+  "leg_p_gains": 2,
+  "t_lower": 0.5,
+  "t_tilt": 0.3,
+  "t_absorb": 0.4,
+  "t_trad_hold": 0.6,
+  "t_trad_crouch": 0.5,
+  "t_trad_crouch_hold": 0.4,
+  "t_trad_extend": 0.5,
+  "t_trad_lift_max": 1.2,
+  "trad_torque": 8,
+  "trad_boost": 2,
+  "trad_hcmd": 0.28,
+  "trad_hcmd_hold": 3,
+  "trad_advance": "pitch",
+  "trad_pitch_handover": -0.26,
+  "trad_z_handover_min": null,
+  "jump_cfg": "releases/P8J3d_wheelfollow_lite/config.json",
+  "trad_lift_profile": "p7t2",
+  "trad_kp_pitch": 12.0,
+  "trad_kd_pitch": 3.0,
+  "trad_kv_vx": 14.0,
+  "trad_vx_tol": 0.6,
+  "trad_extend_retract": 1.0,
+  "trad_extend_boost": 1.5,
+  "trad_band_pitch_tol": 0.35,
+  "trad_band_rate_tol": 1.0,
+  "trad_band_dwell": 0.1,
+  "trad_pose_2w": [
+   1.415,
+   -2.113,
+   -1.415,
+   2.113
+  ]
+ },
+ "name": "P7T2_五槽链_P8",
+ "when": "11-07 P7T2 新轮矩律（俯仰PD+速度回馈）定版；四轮起步→RISE 真起立→两轮"
+}

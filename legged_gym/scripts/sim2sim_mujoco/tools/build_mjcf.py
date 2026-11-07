@@ -3,7 +3,7 @@
 # Author    : SYH
 # File      : build_mjcf.py
 # Purpose   : 由 wbr_v2.urdf 生成四轮部署用 MJCF：补浮动基座与地面、钉住物理选项与接触参数，
-#             从动轮摩擦按训练名义值写入；生成物带 sha256，静态对账以它为基准。
+# 从动轮摩擦按训练名义值写入；生成物带 sha256，静态对账以它为基准。
 # ==============================================================================
 
 import argparse
@@ -22,9 +22,9 @@ ROOT = os.path.abspath(os.path.join(PKG, "../../.."))   # sim2sim_mujoco → scr
 # 四轮名义值（源：wbr_flat4_config.py / wbr_flat4.py）
 CASTER_MU = 0.02        # caster_friction_range 下沿＝无随机
 GROUND_MU = 1.0         # terrain.static_friction / dynamic_friction
-# 【S1b 2026-11-05】接触求解时间常数：默认 0.02 在动态闭环里太软 ⇒ vx 差 −13.5%/+17%（walk03/06）；
-#   收紧到 0.01（MuJoCo 钳到 2×timestep，即实际生效下限）后 walk03 +4.8%、walk06 +9.7%，S1 判据全绿，
-#   零动作沉降 0.9 mm（静态几乎不敏感）。作者批准入冻结资产。floor/轮/从动轮同设，规避 geom 组合规则。
+# 接触求解时间常数：默认 0.02 在动态闭环里太软 ⇒ vx 差 −13.5%/+17%（walk03/06）；
+# 收紧到 0.01（MuJoCo 钳到 2×timestep，即实际生效下限）后 walk03 +4.8%、walk06 +9.7%，S1 判据全绿，
+# 零动作沉降 0.9 mm（静态几乎不敏感），已入冻结资产。floor/轮/从动轮同设，规避 geom 组合规则。
 SOLREF_TC = 0.01
 DT = 0.005              # sim.dt
 GRAVITY = (0.0, 0.0, -9.81)
@@ -153,11 +153,11 @@ def build(urdf, out, mesh=True):
                 g.group = 2
 
     # ⚠ 必须先 compile 再 to_xml：MjSpec 只有在编译后才会把 mesh 资产与 mesh geom 序列化出来
-    #   （只 to_xml 的话整段 <asset> 与视觉 geom 会被静默丢掉）。
+    # （只 to_xml 的话整段 <asset> 与视觉 geom 会被静默丢掉）。
     m = spec.compile()
     xml = spec.to_xml()
     # ⚠ 不用 MjSpec 直接设 contype=0＋conaffinity=0：两者同时为 0 时 compile() 会把该 geom 整条丢掉；
-    #   写成 XML 属性则正常保留（视觉几何不参与碰撞）。
+    # 写成 XML 属性则正常保留（视觉几何不参与碰撞）。
     xml = re.sub(r'(<geom name="[^"]*_vis")', r'\1 contype="0" conaffinity="0"', xml)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w", encoding="utf-8") as f:

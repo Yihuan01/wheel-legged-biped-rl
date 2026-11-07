@@ -3,18 +3,18 @@
 # Author    : SYH
 # File      : uni_chain.py
 # Purpose   : S3 五槽整链（MuJoCo）——把四个策略槽接成一条链，供 CLI 与控制台共用。
-#             槽序与训练侧 wbr_uni 相位编号对齐（phase.py 0-11）：
-#               IDLE2W(0) 两轮行走 → JUMP(1-5) 事件级跳跃 → LOWER(9)/TILT(10)/ABSORB(11) 趴下
-#               → HOLD4W(6) 四轮 → （可选）RISE(7)/HANDOVER(8) 起立
-#             ⚠ 起立槽（P7T）在 MuJoCo 尚未收口：默认请求会被守卫明确拒绝并回显原因，
-#               `allow_rise=True` 才真的进 RISE（用于后续调试）。
+# 槽序与训练侧 wbr_uni 相位编号对齐（phase.py 0-11）：
+# IDLE2W(0) 两轮行走 → JUMP(1-5) 事件级跳跃 → LOWER(9)/TILT(10)/ABSORB(11) 趴下
+# → HOLD4W(6) 四轮 → （可选）RISE(7)/HANDOVER(8) 起立
+# ⚠ 起立槽（P7T）在 MuJoCo 尚未收口：默认请求会被守卫明确拒绝并回显原因，
+# `allow_rise=True` 才真的进 RISE（用于后续调试）。
 #
-#   两种运行模式（互不影响，评估产物可复现）：
-#     interactive=False（CLI 默认）：按固定时长表自动放完 PLAN_2W / PLAN_FULL。
-#     interactive=True （控制台）：槽位**停住等指令**，由 /api/action → chain.request()
-#       驱动；守卫与训练侧 PhaseFSM 同语义（跳跃/趴下过渡态拒绝插队）。
-#       过渡请求先排队，当前槽继续保持，等姿态平稳（站定门）或超时后执行切换——
-#       实测任意时刻立刻切网会让策略吃分布外输入而翻倒。
+# 两种运行模式（互不影响，评估产物可复现）：
+# interactive=False（CLI 默认）：按固定时长表自动放完 PLAN_2W / PLAN_FULL。
+# interactive=True （控制台）：槽位**停住等指令**，由 /api/action → chain.request()
+# 驱动；守卫与训练侧 PhaseFSM 同语义（跳跃/趴下过渡态拒绝插队）。
+# 过渡请求先排队，当前槽继续保持，等姿态平稳（站定门）或超时后执行切换——
+# 实测任意时刻立刻切网会让策略吃分布外输入而翻倒。
 #
 # 契约切换：164（四轮）/ 161@v2（两轮，8 dof 载体）/ 173（趴下，switch 尾块）。
 # ==============================================================================
@@ -106,7 +106,7 @@ class UniChain:
                 c["initial_root_pos"] = [sx, sy, float(c["initial_root_pos"][2])]
         self.h_jump = float(h_jump)
         self.vx = float(vx)
-        self.h_2w = 0.250          # 两轮默认站立高度（作者 2026-11-06 定；面板可调，切槽沿用）
+        self.h_2w = 0.250          # 两轮默认站立高度（面板可调，切槽沿用）
         self.p7t_params = dict(p7t_params or {})
         self.interactive = bool(interactive)
         self.allow_rise = bool(allow_rise)
@@ -115,7 +115,7 @@ class UniChain:
         self.plan = PLAN_FULL if self.start == "4w" else PLAN_2W
         if self.terrain and not self.interactive:
             # 自动播放（CLI 评估）：地形模式跳过跳跃槽——P8J3d 是平地/行进跳，
-            #   在 demo 的起伏/台阶上落地必翻。交互模式下用户仍可自行装填（守卫会提示）。
+            # 在 demo 的起伏/台阶上落地必翻。交互模式下用户仍可自行装填（守卫会提示）。
             self.plan = [p for p in self.plan if p[0] != "JUMP"]
         mjcf = os.path.join(PKG, "assets/mjcf/wbr_v2_demo.xml") if self.terrain else MJCF
         self.loop = SimLoop(mjcf, self.c4, ckpt=self.ck4, mode="policy")
@@ -176,14 +176,14 @@ class UniChain:
                          "right_hip_joint", "right_knee_joint"), POSE_2W):
             self.loop.sim.d.qpos[self.loop.sim.qadr[n]] = v
         # 初始高度＝**指令高度**（与滑条默认/空格复位同值：两轮 0.25），实测两者都能稳站
-        #   （0.25 起始比站姿几何 0.2747 低 25 mm，PD 一拍内收敛；这样"初始姿态/默认显示/复位"三处一致）
+        # （0.25 起始比站姿几何 0.2747 低 25 mm，PD 一拍内收敛；这样"初始姿态/默认显示/复位"三处一致）
         self.loop.sim.d.qpos[2] = float(self.h_2w)
         self.loop.sim.d.qvel[:] = 0.0
         mujoco.mj_forward(self.loop.sim.m, self.loop.sim.d)
         self.loop.warmup(3)
 
     def _enter(self, name):
-        prev_slot = self.slot                  # 【P7T2】交棒来源槽（IDLE2W 渐入判断要用）
+        prev_slot = self.slot                  # 交棒来源槽（IDLE2W 渐入判断要用）
         self.slot = name
         self.t_slot = 0.0
         self.slot_i = next((i for i, (n, _d) in enumerate(self.plan) if n == name), 0)
@@ -201,20 +201,47 @@ class UniChain:
             loop.ctl.wheel_override = None
             self._set_legs([self.c4["default_dof_pos"][self.c4["dof_names"].index(n)]
                             for n in LEGS4])
-            loop.set_cmd("base_height", 0.19)
+            # 4W 静置高度 0.195（⚠ 0.19 正好卡在从动轮接触边界上，会抖）
+            # （实测 h=0.190 时 caster 在 0/46 N 之间跳、ncon 2~6 波动、机体 ±1.5 mm/±0.2 m/s
+            # 的极限环；h≥0.194 则 ncon 恒 6、z p2p=0、vx=0）。0.195 仍在四轮训练高度量程
+            # [0.175, 0.245] 内，视觉差 5 mm。
+            loop.set_cmd("base_height", 0.195)
             loop.set_cmd("lin_vel_x", 0.0)
             loop.snap_cmds()
             self.phase = 6
         elif name == "RISE":
-            # 【P7T2】standup_engine: "p7t2"（平台式甩+接，MuJoCo 验证通过；旧值 "p9" 兼容读）|"p7t"（传统甩尾，MJ 未收口）
-            engine = str(self.p7t_params.get("standup_engine", "p7t2")) if self.p7t_params else "p7t2"
+            # standup_engine: "p7t2"（平台式甩+接，MuJoCo 验证通过；旧值 "p9" 兼容读）|"p7t"（传统甩尾，MJ 未收口）
+            pp = dict(self.p7t_params or {})
+            engine = str(pp.get("standup_engine", "p7t2"))
             if engine in ("p7t2", "p9"):  # "p9"＝2026-11-06 前旧代号，兼容读
-                loop.activate_p7t2(dict(kp=0, kd=0, kd2=2.0, T=0.5, k_roll=2.5, throw_c=0.4))
+                # 起立参数一律从 p7t_params 取，缺省对齐 Isaac 定版
+                loop.activate_p7t2(dict(
+                    kp=float(pp.get("kp", 0.0)),
+                    kd=float(pp.get("kd", 0.0)),
+                    # 轮矩律三增益＋提前介入时刻（缺省＝MJ 标定值）
+                    kp_pitch=float(pp.get("kp_pitch", 14.0)),
+                    kd_pitch=float(pp.get("kd_pitch", 4.0)),
+                    kv_vx=float(pp.get("kv_vx", 10.0)),
+                    law_delay=float(pp.get("law_delay", 0.0)),
+                    crouch=pp.get("crouch") or None,
+                    u_bias=float(pp.get("u_bias", 0.4)),
+                    kd2=float(pp.get("kd2", 3.0)),
+                    T=float(pp.get("T", pp.get("t_lift", 1.2))),
+                    t_lift_max=float(pp.get("t_lift_max_p7t2", pp.get("t_lift_max", 1.2))),
+                    k_roll=float(pp.get("k_roll", 0.0)),
+                    throw_c=float(pp.get("throw_c", 0.25)),
+                    pair_sign=float(pp.get("pair_sign", 1.0)),
+                    throw_pitch=float(pp.get("throw_pitch", 0.55)),
+                    pitch_tol=float(pp.get("pitch_tol", 0.35)),
+                    rate_tol=float(pp.get("rate_tol", 1.0)),
+                    band_steps=int(pp.get("band_steps", 10)),
+                    peak_min=float(pp.get("peak_min", 0.10)),
+                ))
                 loop.term_pitch_ovr = 1.3
                 loop.term_roll_ovr = 1.3
                 loop.caster_air_ok = True
             else:
-                loop.activate_p7t(self.p7t_params or None)
+                loop.activate_p7t(pp or None)
                 loop.term_pitch_ovr = 1.0
             self.phase = 7
         elif name == "IDLE2W":
@@ -231,13 +258,41 @@ class UniChain:
             loop.ctl.wheel_override_r = None
             self._set_legs(POSE_2W)
             if from_ == "RISE":
-                # 【P7T2】交棒（scan13 PASS 全配置）：冷启动（历史/轮速环/last_action 清零）
-                #   + 2s 慢渐入 + h=0.19 保持甩接期口径（h_2w 稍后恢复）
+                # 交棒（scan13 PASS 全配置）：冷启动（历史/轮速环/last_action 清零）
+                # + 2s 慢渐入 + h=0.19 保持甩接期口径（h_2w 稍后恢复）
                 loop.obs_b.reset()
                 loop.ctl.reset()
                 loop.last_action = np.zeros(loop.c["act_dim"], dtype=np.float32)
                 ramp_n = int(2.0 / float(self.c2["control_dt"]))
                 loop.action_ramp = (ramp_n, ramp_n)
+                # 渐入起点＝当前腿角/轮速对应的动作值（r=0 时目标＝当前状态，无跳变）。
+                # 轮也要算：起立段轮子是力矩覆盖（vx≈−2 m/s、ω≈−25 rad/s），交棒瞬间若直接
+                # 把轮速目标打成 0，机体被"刹"得向后仰 20°（实测 10°→30° 只用 0.1 s）。
+                _adn = loop.c["action_dof_names"]
+                _from = np.zeros(loop.c["act_dim"], dtype=np.float32)
+                _lscale = float(loop.c.get("leg_action_scale", 0.5))
+                _wscale = float(loop.c.get("wheel_action_scale", 20.0))
+                _offk = float(loop.ctl.off_knee)     # 左膝 +offk、右膝 −offk（control.torques 语义）
+                for _i, _n in enumerate(_adn):
+                    if _n not in loop.c["dof_names"]:
+                        continue
+                    _j = loop.c["dof_names"].index(_n)
+                    if "wheel" in _n:
+                        # ⚠ qvel 的地址不是 qpos 地址（自由关节 7/6 差一位），必须用 jnt_dofadr
+                        _dadr = int(loop.sim.m.jnt_dofadr[loop.sim.m.joint(_n).id])
+                        _from[_i] = float(loop.sim.d.qvel[_dadr]) / _wscale
+                    else:
+                        # target = default + scale·act + off_knee_signed；要 target==当前角：
+                        _bias = _offk if "left_knee" in _n else (-_offk if "right_knee" in _n else 0.0)
+                        _from[_i] = (float(loop.sim.d.qpos[loop.sim.qadr[_n]])
+                                     - _bias
+                                     - float(loop.c["default_dof_pos"][_j])) / _lscale
+                loop.action_ramp_from = _from
+                # 分通道渐入：腿 2 s（长），轮 0.3 s（短；平衡执行器必须尽快接管）
+                _wheel_n = int(0.1 / float(self.c2["control_dt"]))   # 实测 0.3s→0.1s：交棒后 wobble 7.5°→5.2°、收敛 0.73s→0.06s
+                loop.action_ramp_total = np.array(
+                    [_wheel_n if "wheel" in _n else ramp_n for _n in _adn], dtype=np.float32)
+                loop.action_ramp_left = loop.action_ramp_total.copy()
                 loop.term_pitch_ovr = 1.0
                 loop.term_roll_ovr = 1.0
                 self._grace_until = self.t_total + 2.0
@@ -250,7 +305,7 @@ class UniChain:
             # 高度：面板在本槽内调过就沿用（链不再硬写死），否则用默认 0.25
             loop.set_cmd("base_height", float(self.h_2w))
             if from_ != "RISE":
-                loop.snap_cmds()      # 【P7T2】交棒不 snap：甩接期间 cmds 残留（h=0.19）与新
+                loop.snap_cmds()      # 交棒不 snap：甩接期间 cmds 残留（h=0.19）与新
                                       # 契约混算的瞬变，scan13（无 snap）PASS、有 snap 必翻
             self.phase = 0
         elif name == "JUMP":
@@ -340,14 +395,19 @@ class UniChain:
         elif req == "rise":
             self._enter("RISE")
         elif req == "two":
-            self.loop.reset()
-            self._init_2w_pose()
-            self._enter("IDLE2W")
-        elif req == "next":
-            self._enter("LOWER" if self.slot == "IDLE2W" else "IDLE2W")
-            if self.slot == "IDLE2W":
+            # 四轮→两轮必须走 RISE 真起立（reset+摆姿瞬移会让 2W 网吃分布外初态）
+            if self.slot == "HOLD4W":
+                self._enter("RISE")
+            else:
                 self.loop.reset()
                 self._init_2w_pose()
+                self._enter("IDLE2W")
+        elif req == "next":
+            if self.slot == "IDLE2W":
+                self._enter("LOWER")
+            else:
+                # HOLD4W 的 next 同样走 RISE（直接 IDLE2W＋瞬移会让 2W 网吃分布外初态）
+                self._enter("RISE")
         else:
             return
         self.events.append({"t": round(self.t_total, 3), "slot": self.slot,
@@ -361,7 +421,7 @@ class UniChain:
         self._pending = None
         self.done = False
         self.t_total = 0.0
-        self.vx = 0.0                     # 【复位】回到起始状态：速度归零（作者口径：初始速度应为 0）
+        self.vx = 0.0                     # 【复位】回到起始状态：速度归零（初始速度必须为 0）
         self.loop.set_cmd("lin_vel_x", 0.0)
         self.marks = []
         self.events = []
@@ -395,7 +455,12 @@ class UniChain:
             req, val, waited, quiet = self._pending
             waited += dt
             quiet = quiet + 1 if self._pose_quiet() else 0
-            if quiet >= SETTLE_STEPS or waited >= SETTLE_TIMEOUT:
+            # 交棒后的 2 s 渐入窗内不放行任何过渡：这 2 s 里 2W 策略还在
+            # 渐入（r≈0），腿仍挂在起立末态；此时切趴下/跳跃会在半接管状态下前翻
+            # （实测：交棒 0.08 s 后就 lower ⇒ pitch −0.5 终止）。
+            _grace = float(getattr(self, "_grace_until", 0.0) or 0.0)
+            _in_grace = self.t_total < _grace
+            if (not _in_grace) and (quiet >= SETTLE_STEPS or waited >= SETTLE_TIMEOUT):
                 self._pending = None
                 self._apply_pending(req, val)
             else:
@@ -406,6 +471,18 @@ class UniChain:
             ph = _lie_phase(self.t_slot)
             loop.set_switch_phase(ph)
             self.phase = ph
+        elif self.slot == "HOLD4W":
+            # 零指令时把轮子切成**自由轮**（力矩 0）：4W 静置消抖。
+            # 两件事分开治：
+            # ① 蠕移（vx −1 cm/s、轮辐空转 0.15 rad/s）＝4W 策略零指令仍有左右不等轮速目标
+            # （−0.51/−0.24 rad/s）。只把"目标钉 0"（v1）不管用——速度环照旧出力，反而把机体
+            # 顶成弹跳；直接断轮力矩才是干净的（四点静稳不需要轮子出力）。
+            # ② 弹跳（z ±1.5 mm、vx ±0.2、ncon 在 1~6 之间跳）根因是**站立高度卡在从动轮接触
+            # 边界**：h=0.190 时 caster 接触力在 0/46 N 之间跳，h≥0.194 则恒 6 点接触、完全静止。
+            # 被推一下滑几厘米即止（实测 +0.3 m/s 推 → 0.06 m 停）；面板一给 vx/yaw 立即恢复。
+            _zero_cmd = (abs(float(loop.cmd_target[0])) < 0.02
+                         and abs(float(loop.cmd_target[2])) < 0.02)
+            loop.ctl.wheel_override = 0.0 if _zero_cmd else None
         elif self.slot == "JUMP":
             self.phase = int(loop.jump["ph"]) if loop.jump["ph"] else 1
         elif self.slot == "RISE" and loop.p7t_done:
@@ -446,8 +523,8 @@ class UniChain:
                 self._jump_seen = True
             elif self._jump_seen:
                 # 跳完自动回两轮行走：
-                #   地形模式＝原地交还 P8W7 网（保留地形位置/速度/历史，继续在复杂地形上走）；
-                #   平地模式＝重建干净站姿（历史验证过的口径，避免落地残余动态带进趴下）。
+                # 地形模式＝原地交还 P8W7 网（保留地形位置/速度/历史，继续在复杂地形上走）；
+                # 平地模式＝重建干净站姿（历史验证过的口径，避免落地残余动态带进趴下）。
                 if not self.terrain:
                     self.loop.reset()
                     self._init_2w_pose()
