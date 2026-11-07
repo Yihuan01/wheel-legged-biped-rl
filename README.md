@@ -55,15 +55,15 @@
   Isaac 与 MuJoCo 遥测同列（MuJoCo 由 serve 增量落盘，运行中可跟随）。
 - **使用说明** —— 参数词典、快捷键与存储路径。
 
-<!-- 待截图（作者）：console_run_isaac / console_run_mj / console_cfg_isaac /
-     console_cfg_mj / console_plot / console_help （.png） -->
+截图在仓库 `resources/console/`。
+
 <table>
 <tr><th>仿真运行 · Isaac Gym</th><th>仿真运行 · MuJoCo</th></tr>
-<tr><td></td><td></td></tr>
+<tr><td><img src="resources/console/console_run_isaac.png" width="460"></td><td><img src="resources/console/console_run_mujoco.png" width="460"></td></tr>
 <tr><th>配置Isaac</th><th>配置MJ</th></tr>
-<tr><td></td><td></td></tr>
+<tr><td><img src="resources/console/console_cfg_isaac.png" width="460"></td><td><img src="resources/console/console_cfg_mujoco.png" width="460"></td></tr>
 <tr><th>数据绘图</th><th>使用说明</th></tr>
-<tr><td></td><td></td></tr>
+<tr><td><img src="resources/console/console_plot.png" width="460"></td><td><img src="resources/console/console_help.png" width="460"></td></tr>
 </table>
 
 ## 环境要求
