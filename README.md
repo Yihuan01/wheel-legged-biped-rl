@@ -28,18 +28,15 @@
 ## 功能演示
 
 同一套策略权重在两个仿真引擎上的五种动作（Isaac Gym＝训练同源；MuJoCo＝`sim2sim_mujoco` 部署链）。
-图片与视频录制后经 GitHub Release（`demo-media-v2`）挂载。
+动图在仓库 `resources/demo/`（Isaac＝`*_isaac`，MuJoCo＝`*_mujoco`）。
 
-<!-- 待录制（作者）。建议命名：
-     fourw-<engine> / twow-<engine> / rise-<engine> / crouch-<engine> / jump-<engine>，engine ∈ {isaac, mujoco}
-     每格一个动图（gif/mp4 首帧），或一格图＋一格视频链接 -->
 <table>
 <tr><th></th><th>Isaac Gym</th><th>MuJoCo</th></tr>
-<tr><th>平地行走 · 四轮</th><td></td><td></td></tr>
-<tr><th>平地行走 · 两轮</th><td></td><td></td></tr>
-<tr><th>起立</th><td></td><td></td></tr>
-<tr><th>蹲下</th><td></td><td></td></tr>
-<tr><th>跳跃</th><td></td><td></td></tr>
+<tr><th>平地四轮</th><td><img src="resources/demo/flat4_isaac.gif" width="360"></td><td><img src="resources/demo/flat4_mujoco.gif" width="360"></td></tr>
+<tr><th>平地两轮</th><td><img src="resources/demo/flat2_isaac.gif" width="360"></td><td><img src="resources/demo/flat2_mujoco.gif" width="360"></td></tr>
+<tr><th>复杂地形</th><td><img src="resources/demo/terrain_isaac.gif" width="360"></td><td><img src="resources/demo/terrain_mujoco.gif" width="360"></td></tr>
+<tr><th>模式切换<br>（起立 → 蹲下）</th><td><img src="resources/demo/switch_isaac.gif" width="360"></td><td><img src="resources/demo/switch_mujoco.gif" width="360"></td></tr>
+<tr><th>跳跃动作</th><td><img src="resources/demo/jump_isaac.gif" width="360"></td><td><img src="resources/demo/jump_mujoco.gif" width="360"></td></tr>
 </table>
 
 ## 网页控制台
