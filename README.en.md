@@ -2,87 +2,95 @@
 
 <p align="center"><img src="https://github.com/Yihuan01/wheel-legged-biped-rl/releases/download/demo-media-v1/hero-robot.jpg" alt="WBR wheel-legged biped robot" width="420"></p>
 
-**WBR is a dual-mode wheel-legged biped robot**: two driven wheels with a two-link leg on each
-side (hip + knee), plus a passive caster. Four wheel-legged capabilities — two-wheel walking,
-jumping, four-wheel driving and on-command mode switching — are learned end-to-end with
-reinforcement learning in Isaac Gym.
+**WBR is a dual-mode wheel-legged biped robot**: two driven wheels with a two-link leg on each side (hip + knee), plus a passive caster. It delivers four wheel-legged capabilities — two-wheel walking, jumping, four-wheel driving and mode switching. Trained with PPO reinforcement learning in Isaac Gym, and validated with MuJoCo through Sim2Sim.
 
 > **This repository is a personal learning record.** It documents my training runs and the
-> checkpoints they produced; it is not a polished framework and comes with no support.
-> The code keeps only the WBR robot. The demo robots inherited from upstream `legged_gym`
-> (ANYmal, A1, Cassie, …) were removed; the task registry holds 13 WBR tasks.
-> [English](README.md) | 中文
+> checkpoints they produced; it is not yet a complete, mature framework and comes with no support.  
+> [English](README.en.md) | [中文](README.md)
 
 ## Overview
 
-A reinforcement-learning controller for a **wheel-legged biped**: a torso carried by two wheels,
-each with a two-link leg (hip + knee, 3 DoF per side) plus a passive caster.
+This project builds a reinforcement-learning controller for a **wheel-legged biped**. Based on the
+special configuration with a passive caster at the knee joint, the following tasks are implemented:
 
 | Capability | Task | What it does |
-|---|---|---|
-| Two-wheel walking | `wbr_flat` | Walk and hold height under velocity / yaw / height commands (delivered with 0.1 push and ±5% friction randomization) |
-| Two-wheel jumping | `wbr_jump` | Crouch, push off, tuck in the air, absorb; standing jumps of 54.9 / 98.9 / 92.2 mm |
-| Rough terrain | `wbr_terrain` | Same policy on random undulation; `wbr_p8_L1~L3` (7 element types × 3 levels), `wbr_p8_combo_L1~L3`, `wbr_p8_demo` (corridor) are scripted evaluation scenes |
-| Step-down | `wbr_drop` / `wbr_drop15` | Passive drops without height sensing: 15 cm vertical drops ≥28/32 at every speed (landing rule v2: wheel-lock + slow-speed leg extension in flight) |
-| Four-wheel driving | `wbr_flat4` | Static stable stance, both casters down, drive and turn (vx±1 / yaw±1, 15 DR items) |
-| Mode switching | `wbr_switch`, `wbr_uni` | Stand up from four-wheel to two-wheel and lie back down; five-slot phase machine, stand-up via the P7T2 platform script chain (throw + catch + dwell handover) |
+| --- | --- | --- |
+| Two-wheel walking | `wbr_flat` | In two-wheel mode on flat ground: velocity / yaw commands drive the motion, roll / height commands shape the posture |
+| Two-wheel jumping | `wbr_jump` | The jump is split into stages — pre-crouch → push off → tuck in the air → landing absorption; jumps of 5–10 cm are achieved |
+| Rough terrain | `wbr_terrain` / `wbr_drop15` | In two-wheel mode: adaptive motion on non-planar ground, coping with uneven left/right height, undulating surfaces and stepping down 15 cm ledges |
+| Four-wheel driving | `wbr_flat4` | With the knee-mounted passive casters on the ground, the four-wheel mode gives faster and more agile driving and turning than two-wheel mode |
+| Mode switching | `wbr_switch`, `wbr_uni` | Switching between two-wheel and four-wheel modes: four-wheel → two-wheel uses a classical control script, the reverse uses the learned policy; all strategies are orchestrated by one phase machine |
 
-The terrain acceptance tasks reuse the `wbr_flat` policy — they are scenes, not new training problems.
+Domain randomization on the training side — friction, mass, actuators, sensing, latency, pushes,
+observation noise — is enabled and validated.
 
 ## Demos
 
 Five behaviours of the same policy weights on both simulation engines
 (Isaac Gym = training-native; MuJoCo = the `sim2sim_mujoco` deployment chain).
-Images and videos will be attached via a GitHub release (`demo-media-v2`) once recorded.
 
-<!-- To be recorded by the author. Suggested naming:
-     fourw-<engine> / twow-<engine> / rise-<engine> / crouch-<engine> / jump-<engine>, engine ∈ {isaac, mujoco} -->
-<table>
-<tr><th></th><th>Isaac Gym</th><th>MuJoCo</th></tr>
-<tr><th>Four-wheel driving</th><td></td><td></td></tr>
-<tr><th>Two-wheel walking</th><td></td><td></td></tr>
-<tr><th>Stand-up</th><td></td><td></td></tr>
-<tr><th>Lie-down (crouch)</th><td></td><td></td></tr>
-<tr><th>Jump</th><td></td><td></td></tr>
-</table>
+| | Isaac Gym | MuJoCo |
+| --- | --- | --- |
+| Four-wheel driving | <img src="resources/demo/flat4_isaac.gif" width="360" /> | <img src="resources/demo/flat4_mujoco.gif" width="360" /> |
+| Two-wheel walking | <img src="resources/demo/flat2_isaac.gif" width="360" /> | <img src="resources/demo/flat2_mujoco.gif" width="360" /> |
+| Rough terrain | <img src="resources/demo/terrain_isaac.gif" width="360" /> | <img src="resources/demo/terrain_mujoco.gif" width="360" /> |
+| Mode switching<br> | <img src="resources/demo/switch_isaac.gif" width="360" /> | <img src="resources/demo/switch_mujoco.gif" width="360" /> |
+| Jump | <img src="resources/demo/jump_isaac.gif" width="360" /> | <img src="resources/demo/jump_mujoco.gif" width="360" /> |
 
 ## Web console
 
 `wbr_console` is a browser control surface over the simulation, started with `./run_bench.sh`
 (→ `http://127.0.0.1:8770`). **Two engines**: Isaac Gym (training-native) and MuJoCo
-(the `sim2sim_mujoco` deployment chain — no GPU init, sub-second deterministic stop). Five tabs:
+(the `sim2sim_mujoco` deployment chain). Five tabs:
 
-- **Simulation run** — start / stop, live command sliders (Vx / Yaw / Height / Roll / Jump);
+- **Simulation run** — start / stop, live command sliders (Vx / Yaw / Height / Roll / Jump);  
   in chain mode one-click stand-up / lie-down / load-jump / back-to-two-wheel / back-to-four-wheel /
-  reset / slot-switch, with a command feedback bar and a settle gate (|vx|≤0.08 ∧ |pitch|≤5.7° for
-  8 consecutive steps before any network switch), GPU status, and a dock for the native Isaac window; with MuJoCo the 3D viewport is embedded in the page.
-- **Configure Isaac / Configure MuJoCo** — slot-based: four-wheel 164 / two-wheel walk 161 /
-  two-wheel jump 161 / lie-down 173 / five-slot chain (2-wheel or 4-wheel start), each slot one
-  contract + asset + checkpoint; the MuJoCo chain supports a complex-terrain (four-quadrant demo) map;
-  stand-up via the P7T2 script chain (default) or the P7S learned policy; per-phase timing parameters.
-- **Telemetry plots** — live curves of velocities, wheel/leg states, torques and phase, from the
-  running simulation or a saved TSV log.
+  reset / slot-switch. The native Isaac Gym and MuJoCo windows are docked in the page.
+- **Configure Isaac / Configure MJ** — selection and configuration of single-policy and
+  multi-policy state machines, so different strategies can be observed side by side.
+- **Telemetry plots** — command-following curves for motion and posture, the phase transitions of
+  the jump state, and joint-torque responses; curves of the two engines can be compared.
 - **Reference** — parameter glossary, shortcuts and storage paths.
 
-<!-- To be captured by the author: console_run_isaac / console_run_mj / console_cfg_isaac /
-     console_cfg_mj / console_plot / console_help (.png) -->
 <table>
 <tr><th>Simulation run · Isaac Gym</th><th>Simulation run · MuJoCo</th></tr>
-<tr><td></td><td></td></tr>
-<tr><th>Configure Isaac</th><th>Configure MuJoCo</th></tr>
-<tr><td></td><td></td></tr>
+<tr><td><img src="resources/console/console_run_isaac.png" width="460"></td><td><img src="resources/console/console_run_mujoco.png" width="460"></td></tr>
+<tr><th>Configure Isaac</th><th>Configure MJ</th></tr>
+<tr><td><img src="resources/console/console_cfg_isaac.png" width="460"></td><td><img src="resources/console/console_cfg_mujoco.png" width="460"></td></tr>
 <tr><th>Telemetry plots</th><th>Reference</th></tr>
-<tr><td></td><td></td></tr>
+<tr><td><img src="resources/console/console_plot.png" width="460"></td><td><img src="resources/console/console_help.png" width="460"></td></tr>
 </table>
+
+## Repository layout
+
+```
+legged_gym/
+├── envs/
+│   ├── base/          LeggedRobot base class, config defaults
+│   └── wbr/           ★ this project
+│       ├── flat/      wbr.py, wbr_flat_config.py — two-wheel walking + jumping
+│       ├── flat4/     wbr_flat4.py, wbr_flat4_config.py — four-wheel driving
+│       ├── switch/    stand-up / lie-down phase machine
+│       ├── uni/       unified multi-mode env, FSM, observation builder
+│       └── terrain/   offline height-map generators and release/ evaluation maps (npz)
+├── scripts/           train / play / telemetry; the wbr_console web console (two engines);
+│                      sim2sim_mujoco/ (MuJoCo deployment chain: contracts / assets / six-slot
+│                      chain / acceptance scripts / deployment manifest)
+└── utils/             task registry, helpers, terrain, logger
+rsl_rl-1.0.2/          bundled PPO implementation
+resources/robots/wbr/  URDFs and meshes
+releases/              demo weights only (P7F3e four-wheel, P8W7 walking, P8J3d jump,
+                       P6R81 jump reference, P7L lie-down); full training via train.py
+```
 
 ## Requirements
 
 | Item | Version / note |
-|---|---|
+| --- | --- |
 | GPU | NVIDIA (CUDA-capable) |
-| OS | Ubuntu 20.04 (tested) |
+| OS | Ubuntu 20.04 |
 | Python | 3.8 — Isaac Gym Preview 3 ships binaries for 3.8 only |
-| Simulation | **Isaac Gym Preview 3**, from the NVIDIA developer package (not on PyPI) |
+| Simulation | **Isaac Gym Preview 3**, from the NVIDIA developer package |
 | PyTorch | The one bundled with your Isaac Gym Preview 3 environment |
 | PPO | `rsl_rl` **1.0.2, already vendored** in `rsl_rl-1.0.2/` — do not `pip install rsl-rl` |
 
@@ -141,66 +149,11 @@ python -m legged_gym.scripts.sim2sim_mujoco.deploy.uni_chain --start 2w
 cd legged_gym/scripts/wbr_console && ./run_bench.sh
 ```
 
-`play02.py` accepts the iteration suffix only, so copy the release's `model_*.pt` and `config.json`
+`play02.py` accepts the iteration suffix only, so copy the release's `model_*.pt` and `config.json`  
 into your `logs/<task>/` directory and pass the folder name as `--load_run`.
 
-Telemetry and plots: `play02.py` writes TSV segments to `legged_gym/scripts/wbr_play_data/`,
+Telemetry and plots: `play02.py` writes TSV segments to `legged_gym/scripts/wbr_play_data/`,  
 `plot02.py` turns them into a self-contained HTML page.
-
-## Tasks
-
-| Task | Robot | Observations | Actions | Purpose |
-|---|---|---|---|---|
-| `wbr_flat` | two-wheel (`wbr_v1.urdf`) | 161 | 6 | walk / hold height (randomization delivery base) |
-| `wbr_jump` | two-wheel | 161 | 6 | two-wheel task with the jump phase machine (delivered as P8J3d) |
-| `wbr_terrain` | two-wheel | 161 | 6 | walking on random undulation (no height map in the observation) |
-| `wbr_demo` / `wbr_combo` / `wbr_elements` | two-wheel | 161 | 6 | P8 acceptance scenes: corridor / combined terrain / single-element grid |
-| `wbr_drop` / `wbr_drop15` / `wbr_drop15view` | two-wheel | 161 | 6 | step-down training/acceptance maps with the landing rule |
-| `wbr_flat4` | four-wheel (`wbr_v2.urdf`) | 164 | 6 | static stable stance, drive and turn |
-| `wbr_switch` | four-wheel | 173 | 6 | stand-up / lie-down with phase scripts |
-| `wbr_uni` | multi-slot | 161/164/173 | 6 | unified phase machine (0–11), all modes in one env |
-
-The terrain acceptance tasks reuse the `wbr_flat` policy — they are scenes, not new training
-problems.
-
-## Repository layout
-
-```
-legged_gym/
-├── envs/
-│   ├── base/          LeggedRobot base class, config defaults
-│   └── wbr/           ★ this project
-│       ├── flat/      wbr.py, wbr_flat_config.py — two-wheel walking + jumping
-│       ├── flat4/     wbr_flat4.py, wbr_flat4_config.py — four-wheel driving
-│       ├── switch/    stand-up / lie-down phase machine
-│       ├── uni/       unified multi-mode env, FSM, observation builder
-│       └── terrain/   offline height-map generators and probes
-├── scripts/           train / play / telemetry, and the wbr_console web app
-└── utils/             task registry, helpers, terrain, logger
-rsl_rl-1.0.2/          bundled PPO implementation
-resources/robots/wbr/  URDFs and meshes
-releases/              demo weights only (F3e four-wheel, R81 two-wheel/jump, P7L lie-down); full training via train.py
-```
-
-## Open issues
-
-Listed first, because they say more about the project than the successes do:
-
-- **Jump height does not follow the command monotonically.** Three standing-jump levels are
-  reachable (54.9 / 98.9 / 92.2 mm) but the top level still lands below the middle one — a policy
-  capability boundary; the command-to-apex mapping is non-linear.
-- **The two engines disagree during transients.** For the same weights, jump apex differs by
-  ±25–42 mm between Isaac and MuJoCo (burst-phase transients sensitive to history); walking parity
-  is ≤1.3%, and Isaac is the deployment reference.
-- **The chain still trails standalone on some metrics.** The five-slot chain passes acceptance
-  (C1×3 / C2 / C3), but chain-vs-standalone jump differences are not fully attributed yet.
-- **Discrete obstacles are out of scope.** Step-down covers passive drops (15 cm vertical ≥28/32);
-  rocks, gaps and step-ups are not attempted.
-- **Only simulation.** No hardware numbers, no sim-to-real margin calibration (the Sim2Sim MuJoCo
-  chain is in place as an intermediate validation layer; sensitivity study done — the two-wheel
-  policy depends strongly on the base_lin_vel observation).
-- **Training is fragile.** PPO collapses near the end of long runs; checkpoints are selected
-  per-release rather than taken from the last iteration.
 
 ## Acknowledgements
 
